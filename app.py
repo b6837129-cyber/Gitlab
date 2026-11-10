@@ -6,22 +6,34 @@ from bjt import ACTIVE, CUTOFF, SATURATION, analyze_bias, validate_and_parse
 from verification import verify_active
 
 
-REGION_LABELS = {
-    ACTIVE: "ทำงานปกติ (Active)",
-    CUTOFF: "ตัดขาด (Cutoff)",
-    SATURATION: "อิ่มตัว (Saturation)",
+CALCULATION_ERROR = "These values do not produce a valid result."
+
+DEFAULT_FORM = {
+    "vcc": "12.0",
+    "vcc_unit": "V",
+    "r1": "100",
+    "r1_unit": "kΩ",
+    "r2": "22",
+    "r2_unit": "kΩ",
+    "rc": "2.2",
+    "rc_unit": "kΩ",
+    "re": "1.0",
+    "re_unit": "kΩ",
+    "beta": "100",
+    "beta_unit": "—",
+    "vbe": "0.70",
+    "vbe_unit": "V",
 }
 
-WARNINGS = {
-    ACTIVE: None,
-    CUTOFF: "VBB ≤ VBE: ทรานซิสเตอร์ตัดขาด (IB ≈ 0)",
-    SATURATION: (
-        "VCE ≤ 0.2 V: ทรานซิสเตอร์อิ่มตัว "
-        "ค่า VCE จากแบบจำลองเชิงเส้นใช้ไม่ได้"
-    ),
+UNIT_OPTIONS = {
+    "vcc": ("V", "mV"),
+    "vbe": ("V", "mV"),
+    "r1": ("Ω", "kΩ", "MΩ"),
+    "r2": ("Ω", "kΩ", "MΩ"),
+    "rc": ("Ω", "kΩ", "MΩ"),
+    "re": ("Ω", "kΩ", "MΩ"),
+    "beta": ("—",),
 }
-
-CALCULATION_ERROR = "ค่าที่กรอกทำให้การคำนวณไม่สามารถให้ผลลัพธ์ที่ถูกต้องได้"
 
 DISPLAY_SCALES = (
     ("ib_a", 1e6),
@@ -78,20 +90,56 @@ def _comparison_rows(main, verification):
     return rows
 
 
+def _results_rows(result):
+    return [
+        {"label": "VB", "value": f"{result.vb_v:.2f}", "unit": "V"},
+        {"label": "VE", "value": f"{result.ve_v:.2f}", "unit": "V"},
+        {"label": "VC", "value": f"{result.vc_v:.2f}", "unit": "V"},
+        {"label": "VCE", "value": f"{result.vce_v:.2f}", "unit": "V"},
+        {"label": "IB", "value": f"{result.ib_a * 1e6:.1f}", "unit": "µA"},
+        {"label": "IC", "value": f"{result.ic_a * 1e3:.2f}", "unit": "mA"},
+        {"label": "IE", "value": f"{result.ie_a * 1e3:.2f}", "unit": "mA"},
+    ]
+
+
+def _region_card(result):
+    if result.region == ACTIVE:
+        return {
+            "kind": "ok",
+            "title": "Active region approximation OK",
+            "detail": (
+                f"VCE = {result.vce_v:.2f} V > 0.2 V "
+                "(transistor in active region)"
+            ),
+        }
+    if result.region == CUTOFF:
+        return {
+            "kind": "cutoff",
+            "title": "Transistor is in cutoff",
+            "detail": "VBB ≤ VBE, so IB ≈ 0 and the transistor is off.",
+        }
+    return {
+        "kind": "saturation",
+        "title": "Transistor is in saturation",
+        "detail": "VCE ≤ 0.2 V; the linear VCE model is not valid.",
+    }
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
 
     @app.route("/", methods=["GET", "POST"])
     def index():
         context = {
-            "form": {},
+            "form": dict(DEFAULT_FORM),
             "errors": {},
             "result": None,
             "verification": None,
             "comparison_rows": None,
-            "region_label": None,
-            "warning": None,
+            "region_card": None,
             "calculation_error": None,
+            "unit_options": UNIT_OPTIONS,
+            "results_rows": None,
         }
 
         if request.method == "GET":
@@ -122,8 +170,8 @@ def create_app() -> Flask:
             return render_template("index.html", **context)
 
         context["result"] = result
-        context["region_label"] = REGION_LABELS[result.region]
-        context["warning"] = WARNINGS[result.region]
+        context["region_card"] = _region_card(result)
+        context["results_rows"] = _results_rows(result)
         context["verification"] = verification
         context["comparison_rows"] = comparison_rows
 

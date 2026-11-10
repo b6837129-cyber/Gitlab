@@ -3,13 +3,13 @@ import unittest
 from app import create_app
 
 VALID = {
-    "vcc": "12",
-    "r1": "47000",
-    "r2": "10000",
-    "rc": "2200",
-    "re": "1000",
-    "beta": "150",
-    "vbe": "0.7",
+    "vcc": "12.0", "vcc_unit": "V",
+    "r1": "100", "r1_unit": "kΩ",
+    "r2": "22", "r2_unit": "kΩ",
+    "rc": "2.2", "rc_unit": "kΩ",
+    "re": "1.0", "re_unit": "kΩ",
+    "beta": "100", "beta_unit": "—",
+    "vbe": "0.70", "vbe_unit": "V",
 }
 
 
@@ -17,46 +17,61 @@ class TestApp(unittest.TestCase):
     def setUp(self):
         self.client = create_app().test_client()
 
-    def test_get_form(self):
-        response = self.client.get("/")
-        self.assertEqual(response.status_code, 200)
-        text = response.get_data(as_text=True)
-        self.assertIn('name="vcc"', text)
-        self.assertIn("วงจรไบแอสแบบแบ่งแรงดัน", text)
+    def test_get_prefills_example(self):
+        text = self.client.get("/").get_data(as_text=True)
+        self.assertIn("Lab 02: BJT DC Bias Web App", text)
+        self.assertIn("Computer Programming for Electrical Engineers", text)
+        self.assertIn('value="12.0"', text)
+        self.assertIn('name="r1_unit"', text)
+        self.assertIn("kΩ", text)
 
     def test_valid_post_shows_active_result(self):
-        response = self.client.post("/", data=VALID)
-        self.assertEqual(response.status_code, 200)
-        text = response.get_data(as_text=True)
-        self.assertIn("8.8245", text)
-        self.assertIn("7.7554", text)
-        self.assertIn("ทำงานปกติ (Active)", text)
-        self.assertIn("ตรวจสอบด้วยการคำนวณอิสระ", text)
-        self.assertIn("ผลตรวจสอบ: ผ่าน", text)
+        text = self.client.post("/", data=VALID).get_data(as_text=True)
+        for value in ("1.94", "1.24", "9.29", "8.05", "12.3", "1.23"):
+            self.assertIn(value, text)
+        self.assertIn("Active region approximation OK", text)
+        self.assertIn("Independent Verification", text)
+        self.assertIn("Verification: PASS", text)
 
-    def test_invalid_post_shows_thai_error(self):
+    def test_invalid_post_shows_english_error(self):
         data = dict(VALID)
         data["vcc"] = "0"
-        response = self.client.post("/", data=data)
-        self.assertEqual(response.status_code, 200)
-        text = response.get_data(as_text=True)
-        self.assertIn("VCC ต้องมากกว่า 0 V", text)
-        self.assertNotIn("ตรวจสอบด้วยการคำนวณอิสระ", text)
-
-    def test_cutoff_shows_warning(self):
-        data = dict(VALID)
-        data["r2"] = "1000"
         text = self.client.post("/", data=data).get_data(as_text=True)
-        self.assertIn("ตัดขาด (Cutoff)", text)
-        self.assertIn("ใช้ได้เฉพาะย่าน Active", text)
+        self.assertIn("VCC must be greater than 0 V", text)
+        self.assertNotIn("Independent Verification", text)
 
-    def test_saturation_shows_warning(self):
+    def test_cutoff_shows_card(self):
         data = dict(VALID)
-        data["r1"] = "10000"
-        data["r2"] = "47000"
+        data["r2"] = "1"
         text = self.client.post("/", data=data).get_data(as_text=True)
-        self.assertIn("อิ่มตัว (Saturation)", text)
-        self.assertIn("0.2 V", text)
+        self.assertIn("Transistor is in cutoff", text)
+
+    def test_saturation_shows_card(self):
+        data = dict(VALID)
+        data["r1"] = "22"
+        data["r2"] = "100"
+        text = self.client.post("/", data=data).get_data(as_text=True)
+        self.assertIn("Transistor is in saturation", text)
+
+    def test_other_values_calculate(self):
+        data = {
+            "vcc": "9", "vcc_unit": "V",
+            "r1": "47", "r1_unit": "kΩ",
+            "r2": "10", "r2_unit": "kΩ",
+            "rc": "1", "rc_unit": "kΩ",
+            "re": "470", "re_unit": "Ω",
+            "beta": "200", "beta_unit": "—",
+            "vbe": "0.65", "vbe_unit": "V",
+        }
+        text = self.client.post("/", data=data).get_data(as_text=True)
+        for value in ("1.50", "0.85", "7.19", "6.34", "9.0", "1.81", "1.82"):
+            self.assertIn(value, text)
+        self.assertIn("Active region approximation OK", text)
+
+    def test_svg_contains_submitted_values(self):
+        text = self.client.post("/", data=VALID).get_data(as_text=True)
+        self.assertIn("100 kΩ", text)
+        self.assertIn("12.0 V", text)
 
     def test_extreme_values_show_error_not_crash(self):
         data = dict(VALID)
@@ -69,12 +84,34 @@ class TestApp(unittest.TestCase):
                 "re": "1e308",
             }
         )
-        response = self.client.post("/", data=data)
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(
-            "ไม่สามารถให้ผลลัพธ์ที่ถูกต้องได้",
-            response.get_data(as_text=True),
+        text = self.client.post("/", data=data).get_data(as_text=True)
+        self.assertIn("These values do not produce a valid result.", text)
+
+    def test_non_finite_verification_shows_error(self):
+        data = dict(VALID)
+        data.update({"r1": "5e-324", "rc": "1", "r1_unit": "Ω", "rc_unit": "Ω"})
+        text = self.client.post("/", data=data).get_data(as_text=True)
+        self.assertIn("These values do not produce a valid result.", text)
+        self.assertNotIn("nan", text)
+
+    def test_display_scaling_overflow_shows_error(self):
+        data = dict(VALID)
+        data.update(
+            {
+                "r1": "1e-307",
+                "r2": "1e-307",
+                "rc": "1e-303",
+                "re": "1e-303",
+                "beta": "1",
+                "r1_unit": "Ω",
+                "r2_unit": "Ω",
+                "rc_unit": "Ω",
+                "re_unit": "Ω",
+            }
         )
+        text = self.client.post("/", data=data).get_data(as_text=True)
+        self.assertIn("These values do not produce a valid result.", text)
+        self.assertNotIn("inf", text)
 
     def test_submitted_html_is_escaped(self):
         data = dict(VALID)
@@ -82,32 +119,6 @@ class TestApp(unittest.TestCase):
         text = self.client.post("/", data=data).get_data(as_text=True)
         self.assertIn("&lt;script&gt;", text)
         self.assertNotIn("<script>alert(1)</script>", text)
-
-    def test_non_finite_verification_shows_error(self):
-        data = dict(VALID)
-        data.update({"r1": "5e-324", "rc": "1"})
-        response = self.client.post("/", data=data)
-        self.assertEqual(response.status_code, 200)
-        text = response.get_data(as_text=True)
-        self.assertIn("ไม่สามารถให้ผลลัพธ์ที่ถูกต้องได้", text)
-        self.assertNotIn("nan", text)
-        self.assertNotIn("ผลตรวจสอบ", text)
-
-    def test_display_scaling_overflow_shows_error(self):
-        data = {
-            "vcc": "12",
-            "r1": "1e-307",
-            "r2": "1e-307",
-            "rc": "1e-303",
-            "re": "1e-303",
-            "beta": "1",
-            "vbe": "0.7",
-        }
-        response = self.client.post("/", data=data)
-        self.assertEqual(response.status_code, 200)
-        text = response.get_data(as_text=True)
-        self.assertIn("ไม่สามารถให้ผลลัพธ์ที่ถูกต้องได้", text)
-        self.assertNotIn("inf", text)
 
 
 if __name__ == "__main__":
