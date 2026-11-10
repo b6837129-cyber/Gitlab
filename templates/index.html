@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BJT Common-Emitter DC Bias — วงจรไบแอสแบบแบ่งแรงดัน</title>
+</head>
+<body>
+  <main class="container">
+    <header class="page-header">
+      <h1>BJT Common-Emitter DC Bias</h1>
+      <p>วงจรไบแอสแบบแบ่งแรงดัน</p>
+    </header>
+
+    <form method="post" action="/" class="bias-form">
+      <div class="form-grid">
+        <label>
+          <span>แรงดันไฟเลี้ยง VCC (V)</span>
+          <input type="text" inputmode="decimal" name="vcc" value="{{ form.get('vcc', '') }}">
+          {% if errors.get('vcc') %}<span class="error">{{ errors.get('vcc') }}</span>{% endif %}
+        </label>
+
+        <label>
+          <span>ตัวต้านทาน R1 (Ω)</span>
+          <input type="text" inputmode="decimal" name="r1" value="{{ form.get('r1', '') }}">
+          {% if errors.get('r1') %}<span class="error">{{ errors.get('r1') }}</span>{% endif %}
+        </label>
+
+        <label>
+          <span>ตัวต้านทาน R2 (Ω)</span>
+          <input type="text" inputmode="decimal" name="r2" value="{{ form.get('r2', '') }}">
+          {% if errors.get('r2') %}<span class="error">{{ errors.get('r2') }}</span>{% endif %}
+        </label>
+
+        <label>
+          <span>ตัวต้านทาน RC (Ω)</span>
+          <input type="text" inputmode="decimal" name="rc" value="{{ form.get('rc', '') }}">
+          {% if errors.get('rc') %}<span class="error">{{ errors.get('rc') }}</span>{% endif %}
+        </label>
+
+        <label>
+          <span>ตัวต้านทาน RE (Ω)</span>
+          <input type="text" inputmode="decimal" name="re" value="{{ form.get('re', '') }}">
+          {% if errors.get('re') %}<span class="error">{{ errors.get('re') }}</span>{% endif %}
+        </label>
+
+        <label>
+          <span>อัตราขยายกระแส β</span>
+          <input type="text" inputmode="decimal" name="beta" value="{{ form.get('beta', '') }}">
+          {% if errors.get('beta') %}<span class="error">{{ errors.get('beta') }}</span>{% endif %}
+        </label>
+
+        <label>
+          <span>แรงดันเบส-อิมิตเตอร์ VBE (V)</span>
+          <input type="text" inputmode="decimal" name="vbe" value="{{ form.get('vbe', '') }}">
+          {% if errors.get('vbe') %}<span class="error">{{ errors.get('vbe') }}</span>{% endif %}
+        </label>
+      </div>
+
+      <button type="submit">คำนวณ</button>
+    </form>
+
+    {% if calculation_error %}
+      <div class="warning warning-error">{{ calculation_error }}</div>
+    {% endif %}
+
+    {% if result %}
+      <section class="results">
+        <h2>จุดทำงาน DC</h2>
+        <p class="region">
+          สถานะ:
+          <span class="badge badge-{{ result.region }}">{{ region_label }}</span>
+        </p>
+
+        {% if warning %}
+          <div class="warning">{{ warning }}</div>
+        {% endif %}
+
+        <table class="result-table">
+          <thead>
+            <tr>
+              <th>ค่า</th>
+              <th>ค่าที่คำนวณ</th>
+              <th>หน่วย</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>IB</td><td>{{ "%.4f"|format(result.ib_a * 1000000) }}</td><td>µA</td></tr>
+            <tr><td>IC</td><td>{{ "%.4f"|format(result.ic_a * 1000) }}</td><td>mA</td></tr>
+            <tr><td>IE</td><td>{{ "%.4f"|format(result.ie_a * 1000) }}</td><td>mA</td></tr>
+            <tr><td>VB</td><td>{{ "%.4f"|format(result.vb_v) }}</td><td>V</td></tr>
+            <tr><td>VC</td><td>{{ "%.4f"|format(result.vc_v) }}</td><td>V</td></tr>
+            <tr><td>VE</td><td>{{ "%.4f"|format(result.ve_v) }}</td><td>V</td></tr>
+            <tr><td>VCE</td><td>{{ "%.4f"|format(result.vce_v) }}</td><td>V</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      {% if verification %}
+        <section class="verification">
+          <h2>ตรวจสอบด้วยการคำนวณอิสระ</h2>
+          <table class="result-table">
+            <thead>
+              <tr>
+                <th>ค่า</th>
+                <th>วิธีหลัก</th>
+                <th>วิธี nodal</th>
+                <th>ผลต่าง</th>
+                <th>หน่วย</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in comparison_rows %}
+                <tr>
+                  <td>{{ row.label }}</td>
+                  <td>{{ "%.4f"|format(row.main) }}</td>
+                  <td>{{ "%.4f"|format(row.check) }}</td>
+                  <td>{{ "%.4f"|format(row.diff) }}</td>
+                  <td>{{ row.unit }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <p class="verification-result">
+            ผลตรวจสอบ: {{ "ผ่าน" if verification.matches else "ไม่ผ่าน" }}
+          </p>
+        </section>
+      {% else %}
+        <p class="note">การตรวจสอบด้วยวิธี nodal ใช้ได้เฉพาะย่าน Active</p>
+      {% endif %}
+    {% endif %}
+  </main>
+</body>
+</html>
