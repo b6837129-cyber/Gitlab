@@ -6,6 +6,30 @@ from typing import Mapping
 REQUIRED_FIELDS = ("vcc", "r1", "r2", "rc", "re", "beta", "vbe")
 RESISTANCE_FIELDS = ("r1", "r2", "rc", "re")
 
+VOLTAGE_UNITS = {"V": 1.0, "mV": 1e-3}
+RESISTANCE_UNITS = {"Ω": 1.0, "kΩ": 1e3, "MΩ": 1e6}
+BETA_UNITS = {"—": 1.0}
+
+UNIT_FACTORS = {
+    "vcc": VOLTAGE_UNITS,
+    "vbe": VOLTAGE_UNITS,
+    "r1": RESISTANCE_UNITS,
+    "r2": RESISTANCE_UNITS,
+    "rc": RESISTANCE_UNITS,
+    "re": RESISTANCE_UNITS,
+    "beta": BETA_UNITS,
+}
+
+DEFAULT_UNITS = {
+    "vcc": "V",
+    "vbe": "V",
+    "r1": "Ω",
+    "r2": "Ω",
+    "rc": "Ω",
+    "re": "Ω",
+    "beta": "—",
+}
+
 
 ACTIVE = "active"
 CUTOFF = "cutoff"
@@ -47,30 +71,34 @@ def validate_and_parse(
     for field in REQUIRED_FIELDS:
         text = str(raw.get(field, "")).strip()
         if not text:
-            errors[field] = "กรุณากรอกค่านี้"
+            errors[field] = "Please enter this value"
             continue
         try:
             number = float(text)
         except ValueError:
-            errors[field] = "กรุณากรอกเป็นตัวเลข"
+            errors[field] = "Please enter a number"
             continue
         if not math.isfinite(number):
-            errors[field] = "กรุณากรอกเป็นตัวเลข"
+            errors[field] = "Please enter a number"
             continue
-        values[field] = number
+        unit = str(raw.get(f"{field}_unit", DEFAULT_UNITS[field])).strip()
+        if unit not in UNIT_FACTORS[field]:
+            errors[field] = "Please select a valid unit"
+            continue
+        values[field] = number * UNIT_FACTORS[field][unit]
 
     if "vcc" in values and values["vcc"] <= 0:
-        errors["vcc"] = "VCC ต้องมากกว่า 0 V"
+        errors["vcc"] = "VCC must be greater than 0 V"
 
     for field in RESISTANCE_FIELDS:
         if field in values and values[field] <= 0:
-            errors[field] = "ค่าความต้านทานต้องมากกว่า 0 Ω"
+            errors[field] = "Resistance must be greater than 0 Ω"
 
     if "beta" in values and values["beta"] < 1:
-        errors["beta"] = "β ต้องมีค่าตั้งแต่ 1 ขึ้นไป"
+        errors["beta"] = "β must be at least 1"
 
     if "vbe" in values and not (0 <= values["vbe"] <= 1.5):
-        errors["vbe"] = "VBE ต้องอยู่ระหว่าง 0 ถึง 1.5 V"
+        errors["vbe"] = "VBE must be between 0 and 1.5 V"
 
     if errors:
         return None, errors

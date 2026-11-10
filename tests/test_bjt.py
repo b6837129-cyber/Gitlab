@@ -35,45 +35,45 @@ class TestValidation(unittest.TestCase):
         del data["r1"]
         inputs, errors = validate_and_parse(data)
         self.assertIsNone(inputs)
-        self.assertEqual(errors["r1"], "กรุณากรอกค่านี้")
+        self.assertEqual(errors["r1"], "Please enter this value")
 
     def test_non_numeric_reports_error(self):
         data = dict(VALID)
         data["rc"] = "abc"
         _, errors = validate_and_parse(data)
-        self.assertEqual(errors["rc"], "กรุณากรอกเป็นตัวเลข")
+        self.assertEqual(errors["rc"], "Please enter a number")
 
     def test_non_finite_reports_error(self):
         for value in ("nan", "inf", "-inf"):
             data = dict(VALID)
             data["vcc"] = value
             _, errors = validate_and_parse(data)
-            self.assertEqual(errors["vcc"], "กรุณากรอกเป็นตัวเลข")
+            self.assertEqual(errors["vcc"], "Please enter a number")
 
     def test_zero_resistance_reports_error(self):
         data = dict(VALID)
         data["re"] = "0"
         _, errors = validate_and_parse(data)
-        self.assertEqual(errors["re"], "ค่าความต้านทานต้องมากกว่า 0 Ω")
+        self.assertEqual(errors["re"], "Resistance must be greater than 0 Ω")
 
     def test_negative_resistance_reports_error(self):
         data = dict(VALID)
         data["r1"] = "-1"
         _, errors = validate_and_parse(data)
-        self.assertEqual(errors["r1"], "ค่าความต้านทานต้องมากกว่า 0 Ω")
+        self.assertEqual(errors["r1"], "Resistance must be greater than 0 Ω")
 
     def test_beta_below_one_reports_error(self):
         data = dict(VALID)
         data["beta"] = "0.9"
         _, errors = validate_and_parse(data)
-        self.assertEqual(errors["beta"], "β ต้องมีค่าตั้งแต่ 1 ขึ้นไป")
+        self.assertEqual(errors["beta"], "β must be at least 1")
 
     def test_vbe_outside_range_reports_error(self):
         for value in ("-0.1", "1.6"):
             data = dict(VALID)
             data["vbe"] = value
             _, errors = validate_and_parse(data)
-            self.assertEqual(errors["vbe"], "VBE ต้องอยู่ระหว่าง 0 ถึง 1.5 V")
+            self.assertEqual(errors["vbe"], "VBE must be between 0 and 1.5 V")
 
     def test_whitespace_is_accepted(self):
         data = dict(VALID)
@@ -103,14 +103,49 @@ class TestValidation(unittest.TestCase):
         data["r1"] = ""
         inputs, errors = validate_and_parse(data)
         self.assertIsNone(inputs)
-        self.assertEqual(errors["r1"], "กรุณากรอกค่านี้")
+        self.assertEqual(errors["r1"], "Please enter this value")
 
     def test_whitespace_only_field_reports_error(self):
         data = dict(VALID)
         data["beta"] = "   "
         inputs, errors = validate_and_parse(data)
         self.assertIsNone(inputs)
-        self.assertEqual(errors["beta"], "กรุณากรอกค่านี้")
+        self.assertEqual(errors["beta"], "Please enter this value")
+
+    def test_kilo_ohm_unit_is_converted(self):
+        data = dict(VALID)
+        data.update({"r1": "100", "r1_unit": "kΩ"})
+        inputs, errors = validate_and_parse(data)
+        self.assertEqual(errors, {})
+        self.assertAlmostEqual(inputs.r1_ohm, 100000.0)
+
+    def test_mega_ohm_unit_is_converted(self):
+        data = dict(VALID)
+        data.update({"r2": "1", "r2_unit": "MΩ"})
+        inputs, errors = validate_and_parse(data)
+        self.assertEqual(errors, {})
+        self.assertAlmostEqual(inputs.r2_ohm, 1_000_000.0)
+
+    def test_millivolt_unit_is_converted(self):
+        data = dict(VALID)
+        data.update({"vcc": "12000", "vcc_unit": "mV"})
+        inputs, errors = validate_and_parse(data)
+        self.assertEqual(errors, {})
+        self.assertAlmostEqual(inputs.vcc_v, 12.0)
+
+    def test_missing_unit_defaults_to_base_unit(self):
+        data = dict(VALID)
+        data.pop("vcc_unit", None)
+        inputs, errors = validate_and_parse(data)
+        self.assertEqual(errors, {})
+        self.assertAlmostEqual(inputs.vcc_v, 12.0)
+
+    def test_invalid_unit_reports_error(self):
+        data = dict(VALID)
+        data.update({"beta": "100", "beta_unit": "kΩ"})
+        inputs, errors = validate_and_parse(data)
+        self.assertIsNone(inputs)
+        self.assertEqual(errors["beta"], "Please select a valid unit")
 
 
 class TestAnalyzeBias(unittest.TestCase):
