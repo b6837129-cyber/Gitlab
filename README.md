@@ -15,6 +15,8 @@
 
 ## วิธีติดตั้ง
 
+ต้องใช้ Python 3.12 ขึ้นไป
+
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
@@ -38,7 +40,7 @@ python -m venv .venv
 
 ค่าอินพุต:
 
-| ค่า | ค่า |
+| ปริมาณ | ค่า |
 | --- | --- |
 | VCC | 12 V |
 | R1 | 47 kΩ |
@@ -50,7 +52,7 @@ python -m venv .venv
 
 ผลลัพธ์โดยประมาณ:
 
-| ค่า | ค่า |
+| ปริมาณ | ค่า |
 | --- | --- |
 | IB | 8.8245 µA |
 | IC | 1.3237 mA |

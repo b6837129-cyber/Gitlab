@@ -91,6 +91,27 @@ class TestValidation(unittest.TestCase):
         self.assertAlmostEqual(inputs.beta, 1.0)
         self.assertAlmostEqual(inputs.vbe_v, 1.5)
 
+    def test_vbe_zero_is_accepted(self):
+        data = dict(VALID)
+        data["vbe"] = "0"
+        inputs, errors = validate_and_parse(data)
+        self.assertEqual(errors, {})
+        self.assertAlmostEqual(inputs.vbe_v, 0.0)
+
+    def test_blank_field_reports_error(self):
+        data = dict(VALID)
+        data["r1"] = ""
+        inputs, errors = validate_and_parse(data)
+        self.assertIsNone(inputs)
+        self.assertEqual(errors["r1"], "กรุณากรอกค่านี้")
+
+    def test_whitespace_only_field_reports_error(self):
+        data = dict(VALID)
+        data["beta"] = "   "
+        inputs, errors = validate_and_parse(data)
+        self.assertIsNone(inputs)
+        self.assertEqual(errors["beta"], "กรุณากรอกค่านี้")
+
 
 class TestAnalyzeBias(unittest.TestCase):
     def test_known_active_bias_point(self):

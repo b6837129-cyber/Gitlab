@@ -83,6 +83,32 @@ class TestApp(unittest.TestCase):
         self.assertIn("&lt;script&gt;", text)
         self.assertNotIn("<script>alert(1)</script>", text)
 
+    def test_non_finite_verification_shows_error(self):
+        data = dict(VALID)
+        data.update({"r1": "5e-324", "rc": "1"})
+        response = self.client.post("/", data=data)
+        self.assertEqual(response.status_code, 200)
+        text = response.get_data(as_text=True)
+        self.assertIn("ไม่สามารถให้ผลลัพธ์ที่ถูกต้องได้", text)
+        self.assertNotIn("nan", text)
+        self.assertNotIn("ผลตรวจสอบ", text)
+
+    def test_display_scaling_overflow_shows_error(self):
+        data = {
+            "vcc": "12",
+            "r1": "1e-307",
+            "r2": "1e-307",
+            "rc": "1e-303",
+            "re": "1e-303",
+            "beta": "1",
+            "vbe": "0.7",
+        }
+        response = self.client.post("/", data=data)
+        self.assertEqual(response.status_code, 200)
+        text = response.get_data(as_text=True)
+        self.assertIn("ไม่สามารถให้ผลลัพธ์ที่ถูกต้องได้", text)
+        self.assertNotIn("inf", text)
+
 
 if __name__ == "__main__":
     unittest.main()
