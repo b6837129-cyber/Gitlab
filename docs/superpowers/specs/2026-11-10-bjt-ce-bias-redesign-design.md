@@ -1,7 +1,7 @@
 # BJT DC Bias Web App — UI Redesign (English) — Design
 
 Date: 2026-11-10
-Status: Awaiting approval
+Status: Approved and implemented
 Approach: A — server-rendered Flask + inline SVG, no JavaScript
 
 ## Intent

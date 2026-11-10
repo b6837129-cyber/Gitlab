@@ -2,7 +2,14 @@ import math
 
 from flask import Flask, render_template, request
 
-from bjt import ACTIVE, CUTOFF, SATURATION, analyze_bias, validate_and_parse
+from bjt import (
+    ACTIVE,
+    CUTOFF,
+    DEFAULT_UNITS,
+    SATURATION,
+    analyze_bias,
+    validate_and_parse,
+)
 from verification import verify_active
 
 
@@ -106,20 +113,23 @@ def _region_card(result):
     if result.region == ACTIVE:
         return {
             "kind": "ok",
+            "icon": "✓",
             "title": "Active region approximation OK",
             "detail": (
-                f"VCE = {result.vce_v:.2f} V > 0.2 V "
+                f"VCE = {result.vce_v:.3f} V > 0.2 V "
                 "(transistor in active region)"
             ),
         }
     if result.region == CUTOFF:
         return {
             "kind": "cutoff",
+            "icon": "!",
             "title": "Transistor is in cutoff",
             "detail": "VBB ≤ VBE, so IB ≈ 0 and the transistor is off.",
         }
     return {
         "kind": "saturation",
+        "icon": "!",
         "title": "Transistor is in saturation",
         "detail": "VCE ≤ 0.2 V; the linear VCE model is not valid.",
     }
@@ -146,7 +156,10 @@ def create_app() -> Flask:
             return render_template("index.html", **context)
 
         inputs, errors = validate_and_parse(request.form)
-        context["form"] = request.form
+        submitted = request.form.to_dict()
+        for field, unit in DEFAULT_UNITS.items():
+            submitted.setdefault(f"{field}_unit", unit)
+        context["form"] = submitted
         if errors:
             context["errors"] = errors
             return render_template("index.html", **context)

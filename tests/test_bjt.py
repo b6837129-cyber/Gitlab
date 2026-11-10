@@ -255,6 +255,19 @@ class TestAnalyzeBias(unittest.TestCase):
         with self.assertRaises(ValueError):
             analyze_bias(inputs)
 
+    def test_extreme_beta_raises_value_error(self):
+        inputs = BiasInputs(
+            vcc_v=12,
+            r1_ohm=100000,
+            r2_ohm=22000,
+            rc_ohm=2200,
+            re_ohm=1000,
+            beta=1e308,
+            vbe_v=0.7,
+        )
+        with self.assertRaises(ValueError):
+            analyze_bias(inputs)
+
 
 if __name__ == "__main__":
     unittest.main()

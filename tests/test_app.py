@@ -1,3 +1,4 @@
+import re
 import unittest
 
 from app import create_app
@@ -119,6 +120,34 @@ class TestApp(unittest.TestCase):
         text = self.client.post("/", data=data).get_data(as_text=True)
         self.assertIn("&lt;script&gt;", text)
         self.assertNotIn("<script>alert(1)</script>", text)
+
+    def test_missing_units_use_base_units(self):
+        data = {key: value for key, value in VALID.items() if not key.endswith("_unit")}
+        text = self.client.post("/", data=data).get_data(as_text=True)
+        self.assertIn('<option value="Ω" selected>', text)
+        self.assertIn("100 Ω", text)
+        self.assertIn("12298.6", text)
+        self.assertIn("1229.86", text)
+
+    def test_invalid_unit_shows_error(self):
+        data = dict(VALID)
+        data["beta_unit"] = "kΩ"
+        text = self.client.post("/", data=data).get_data(as_text=True)
+        self.assertIn("Please select a valid unit", text)
+        self.assertNotIn("Active region approximation OK", text)
+        self.assertNotIn("Independent Verification", text)
+
+    def test_results_rows_in_order(self):
+        text = self.client.post("/", data=VALID).get_data(as_text=True)
+        labels = re.findall(r'<td class="result-label">(.*?)</td>', text)
+        self.assertEqual(labels, ["VB", "VE", "VC", "VCE", "IB", "IC", "IE"])
+
+    def test_extreme_beta_shows_error(self):
+        data = dict(VALID)
+        data["beta"] = "1e308"
+        text = self.client.post("/", data=data).get_data(as_text=True)
+        self.assertIn("These values do not produce a valid result.", text)
+        self.assertNotIn("Active region approximation OK", text)
 
 
 if __name__ == "__main__":

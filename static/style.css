@@ -116,6 +116,12 @@ body {
   padding: 0 1.5rem 1.25rem;
 }
 
+.below-grid {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 0 1.5rem 2.5rem;
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--line);
@@ -413,8 +419,7 @@ body {
 /* ---------- Verification ---------- */
 
 .verification-card {
-  max-width: 1140px;
-  margin: 0 auto 1.25rem;
+  margin-bottom: 1.25rem;
 }
 
 .verification-card h2 {
@@ -458,7 +463,14 @@ body {
 .verification-result {
   margin: 0.9rem 0 0;
   font-weight: 650;
+}
+
+.verification-result.is-pass {
   color: #065f46;
+}
+
+.verification-result.is-fail {
+  color: #b91c1c;
 }
 
 .note {
@@ -471,8 +483,6 @@ body {
 /* ---------- Goal card ---------- */
 
 .goal-card {
-  max-width: 1140px;
-  margin: 0 auto 2.5rem;
   padding: 1.1rem 1.35rem;
   border: 1px solid #bfdbfe;
   border-radius: var(--radius);
@@ -536,10 +546,8 @@ body {
     padding: 0 1rem 1rem;
   }
 
-  .verification-card,
-  .goal-card {
-    margin-left: 1rem;
-    margin-right: 1rem;
+  .below-grid {
+    padding: 0 1rem 1.5rem;
   }
 
   .verification-table {

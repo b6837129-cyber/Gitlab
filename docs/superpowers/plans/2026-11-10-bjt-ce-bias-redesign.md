@@ -1,6 +1,6 @@
 # BJT DC Bias Web App — English Dashboard Redesign Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Restyle the BJT common-emitter DC bias app into the supplied English three-column lab dashboard, with functional unit dropdowns, a live-value circuit SVG, and English validation.
 
@@ -48,7 +48,7 @@
   - `DEFAULT_UNITS: dict[str, str]` keyed by form field.
   - `validate_and_parse(raw: Mapping[str, str]) -> tuple[BiasInputs | None, dict[str, str]]` unchanged signature.
 
-- [ ] **Step 1: Write the failing unit tests**
+- [x] **Step 1: Write the failing unit tests**
 
 Append to `TestValidation` in `tests/test_bjt.py`:
 
@@ -92,21 +92,21 @@ Append to `TestValidation` in `tests/test_bjt.py`:
 Update the expected messages in the existing tests to English:
 `Please enter this value`, `Please enter a number`, `Resistance must be greater than 0 Ω`, `β must be at least 1`, `VBE must be between 0 and 1.5 V`.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `.venv\Scripts\python.exe -m unittest tests.test_bjt -v`
 Expected: the new unit tests fail because units are ignored, and the message assertions fail with Thai text.
 
-- [ ] **Step 3: Implement unit parsing in `bjt.py`**
+- [x] **Step 3: Implement unit parsing in `bjt.py`**
 
 Add the constants above. In `validate_and_parse`, keep the existing `math.isfinite` check on the parsed number, then read `raw.get(f"{field}_unit", DEFAULT_UNITS[field])`, strip it, and multiply by `UNIT_FACTORS[field][unit]`; on an unknown unit set `errors[field] = "Please select a valid unit"` and continue. Applying the factor after the finite check is deliberate: a finite value times `kΩ` that overflows stays a calculation error (caught by `analyze_bias`), matching the existing extreme-value test. Replace every Thai message with its English counterpart from the spec.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `.venv\Scripts\python.exe -m unittest tests.test_bjt -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add bjt.py tests/test_bjt.py
@@ -131,7 +131,7 @@ git commit -m "feat: parse unit selections in bias inputs"
   - `_region_card(result: BiasResult) -> dict[str, str]` with keys `kind` (`ok`/`cutoff`/`saturation`), `title`, `detail`.
   - Template context keys: `form`, `errors`, `result`, `verification`, `comparison_rows`, `region_card`, `calculation_error`, `unit_options`, `results_rows`.
 
-- [ ] **Step 1: Write the failing route tests**
+- [x] **Step 1: Write the failing route tests**
 
 Replace `VALID` in `tests/test_app.py` with the mockup example plus units:
 
@@ -232,16 +232,16 @@ Replace the assertions of the existing tests and add:
 
 Keep `test_submitted_html_is_escaped` (still asserting `&lt;script&gt;`).
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `.venv\Scripts\python.exe -m unittest tests.test_app -v`
 Expected: FAIL because the template still has the old Thai layout and no unit selects.
 
-- [ ] **Step 3: Implement the route context in `app.py`**
+- [x] **Step 3: Implement the route context in `app.py`**
 
 Add `DEFAULT_FORM`, `UNIT_OPTIONS`, `_results_rows`, and `_region_card` as specified above. Initialize the GET context with `dict(DEFAULT_FORM)`, `UNIT_OPTIONS`, and empty result fields. On success set `results_rows` and `region_card`; keep the existing finite checks and verification. Change `CALCULATION_ERROR` to `"These values do not produce a valid result."`.
 
-- [ ] **Step 4: Rewrite `templates/index.html`**
+- [x] **Step 4: Rewrite `templates/index.html`**
 
 Build the mockup structure:
 
@@ -254,12 +254,12 @@ Build the mockup structure:
 - Verification card below the grid: keep the existing comparison table, heading `Independent Verification`, and `Verification: PASS/FAIL`.
 - Week 2 Goal card with the mockup text.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `.venv\Scripts\python.exe -m unittest tests.test_app -v`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app.py templates/index.html tests/test_app.py
@@ -277,20 +277,20 @@ git commit -m "feat: build English dashboard layout"
 - Consumes: the class names from Task 2 (`app-header`, `brand`, `chip-icon`, `course-badge`, `dashboard`, `card`, `field-row`, `field-control`, `results-table`, `region-card`, `region-ok`, `region-cutoff`, `region-saturation`, `verification-card`, `goal-card`, `error`, `placeholder`).
 - Produces: no behavior changes.
 
-- [ ] **Step 1: Rewrite `static/style.css`**
+- [x] **Step 1: Rewrite `static/style.css`**
 
 Match the mockup: light grey background, white cards with a thin border and soft shadow, a three-column grid that collapses to one column below ~980 px, teal accents, blue course badge, right-aligned numeric result column with a pale blue fill, green/orange/red region cards, and a pale blue Week 2 Goal card. Keep inputs and selects readable and keyboard-focusable.
 
-- [ ] **Step 2: Run the full suite**
+- [x] **Step 2: Run the full suite**
 
 Run: `.venv\Scripts\python.exe -m unittest discover -s tests -t . -v`
 Expected: PASS (CSS changes no behavior).
 
-- [ ] **Step 3: Visual check in the browser**
+- [x] **Step 3: Visual check in the browser**
 
 Start the app if it is not already running: `.venv\Scripts\python.exe app.py`, open `http://127.0.0.1:5000`, and confirm the three cards, header badge, active card, verification card, and goal card render, with no console errors. Check a narrow viewport collapses to one column.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add static/style.css
@@ -308,27 +308,27 @@ git commit -m "style: match the lab dashboard mockup"
 - Consumes: the finished app and test suite.
 - Produces: English usage docs, a verified localhost demo, and `main` updated on GitHub.
 
-- [ ] **Step 1: Update `README.md`**
+- [x] **Step 1: Update `README.md`**
 
 Document the English dashboard, the unit dropdowns (V/mV, Ω/kΩ/MΩ), the mockup example inputs, the exact model results for those inputs, and the three region cards. Keep the install/run/test commands.
 
-- [ ] **Step 2: Run the full suite**
+- [x] **Step 2: Run the full suite**
 
 Run: `.venv\Scripts\python.exe -m unittest discover -s tests -t . -v`
 Expected: all tests PASS.
 
-- [ ] **Step 3: Demo the three regions and an invalid input**
+- [x] **Step 3: Demo the three regions and an invalid input**
 
 Use the browser at `http://127.0.0.1:5000` to confirm active (default example), cutoff (`R2 = 1 kΩ`), saturation (`R1 = 22 kΩ`, `R2 = 100 kΩ`), and invalid (`VCC = 0`). Confirm no console errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add README.md
 git commit -m "docs: describe the English dashboard and units"
 ```
 
-- [ ] **Step 5: Merge and push**
+- [x] **Step 5: Merge and push**
 
 ```bash
 git -C "C:\Users\b6837129\Desktop\Gitlab" merge --ff-only bjt-ce-bias

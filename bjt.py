@@ -135,9 +135,10 @@ def analyze_bias(inputs: BiasInputs) -> BiasResult:
             region=CUTOFF,
         )
     else:
-        ib_a = (vbb_v - inputs.vbe_v) / (
-            rb_ohm + (inputs.beta + 1) * inputs.re_ohm
-        )
+        denominator = rb_ohm + (inputs.beta + 1) * inputs.re_ohm
+        if not math.isfinite(denominator):
+            raise ValueError("calculation produced a non-finite denominator")
+        ib_a = (vbb_v - inputs.vbe_v) / denominator
         ic_a = inputs.beta * ib_a
         ie_a = (inputs.beta + 1) * ib_a
         ve_v = ie_a * inputs.re_ohm

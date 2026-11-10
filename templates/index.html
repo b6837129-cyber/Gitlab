@@ -15,8 +15,7 @@
                value="{{ form.get(name, '') }}">
         <select name="{{ name }}_unit" aria-label="{{ name }} unit">
           {% for unit in unit_options[name] %}
-            <option value="{{ unit }}"
-              {% if form.get(name ~ '_unit', default_unit) == unit %}selected{% endif %}>{{ unit }}</option>
+            <option value="{{ unit }}"{% if form.get(name ~ '_unit', default_unit) == unit %} selected{% endif %}>{{ unit }}</option>
           {% endfor %}
         </select>
       </div>
@@ -168,7 +167,7 @@
         </table>
 
         <div class="region-card region-{{ region_card.kind }}">
-          <span class="region-icon" aria-hidden="true">✓</span>
+          <span class="region-icon" aria-hidden="true">{{ region_card.icon }}</span>
           <div class="region-text">
             <strong>{{ region_card.title }}</strong>
             <span>{{ region_card.detail }}</span>
@@ -180,6 +179,7 @@
     </section>
   </main>
 
+  <div class="below-grid">
   {% if verification %}
     <section class="card verification-card">
       <h2>Independent Verification</h2>
@@ -205,7 +205,7 @@
           {% endfor %}
         </tbody>
       </table>
-      <p class="verification-result">Verification: {{ "PASS" if verification.matches else "FAIL" }}</p>
+      <p class="verification-result {{ 'is-pass' if verification.matches else 'is-fail' }}">Verification: {{ "PASS" if verification.matches else "FAIL" }}</p>
     </section>
   {% elif result %}
     <section class="card verification-card">
@@ -225,5 +225,6 @@
       I<sub>B</sub>, I<sub>C</sub>, I<sub>E</sub>) for a common-emitter
       amplifier with voltage-divider bias, and displays the results.</p>
   </section>
+  </div>
 </body>
 </html>
