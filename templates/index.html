@@ -3,17 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Lab 02: BJT DC Bias Web App</title>
+  <title>Lab 03: BJT DC Bias Web App</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  {% macro field(name, label, default_unit) %}
-    <div class="field-row">
+  {% set cur_mode = selected_mode if selected_mode in mode_labels else 'divider' %}
+
+  {% macro field(name, label, default_unit, modes_attr='') %}
+    {% set is_visible = (not modes_attr) or (cur_mode in modes_attr.split()) %}
+    <div class="field-row"
+         {% if modes_attr %}data-modes="{{ modes_attr }}"{% endif %}
+         {% if not is_visible %}hidden{% endif %}>
       <label for="{{ name }}">{{ label|safe }}</label>
       <div class="field-control">
         <input id="{{ name }}" name="{{ name }}" type="text" inputmode="decimal"
-               value="{{ form.get(name, '') }}">
-        <select name="{{ name }}_unit" aria-label="{{ name }} unit">
+               value="{{ form.get(name, '') }}"
+               {% if not is_visible %}disabled{% endif %}>
+        <select name="{{ name }}_unit" aria-label="{{ name }} unit"
+                {% if not is_visible %}disabled{% endif %}>
           {% for unit in unit_options[name] %}
             <option value="{{ unit }}"{% if form.get(name ~ '_unit', default_unit) == unit %} selected{% endif %}>{{ unit }}</option>
           {% endfor %}
@@ -38,8 +45,8 @@
         </svg>
       </span>
       <div class="brand-text">
-        <h1>Lab 02: BJT DC Bias Web App</h1>
-        <p>ENG29 2121 – Common Emitter (Voltage Divider Bias)</p>
+        <h1>Lab 03: BJT DC Bias Web App</h1>
+        <p>ENG29 2121 – Common Emitter ({{ selected_mode_label }})</p>
       </div>
     </div>
     <div class="course-badge">
@@ -57,12 +64,25 @@
         Input Parameters
       </h2>
 
-      <form method="post" action="/" class="bias-form">
+      <form method="post" action="/" class="bias-form" id="bias-form">
+        <div class="field-row">
+          <label for="mode">Bias Configuration (Mode)</label>
+          <div class="field-control">
+            <select id="mode" name="mode" style="width: 100%;">
+              {% for mode_key, mode_name in mode_labels.items() %}
+                <option value="{{ mode_key }}"{% if form.get('mode', 'divider') == mode_key %} selected{% endif %}>{{ mode_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% if errors.get('mode') %}<span class="error">{{ errors.get('mode') }}</span>{% endif %}
+        </div>
+
         {{ field('vcc', 'V<sub>CC</sub> (Supply Voltage)', 'V') }}
-        {{ field('r1', 'R<sub>1</sub> (Upper Divider)', 'kΩ') }}
-        {{ field('r2', 'R<sub>2</sub> (Lower Divider)', 'kΩ') }}
+        {{ field('r1', 'R<sub>1</sub> (Upper Divider)', 'kΩ', 'divider') }}
+        {{ field('r2', 'R<sub>2</sub> (Lower Divider)', 'kΩ', 'divider') }}
+        {{ field('rb', 'R<sub>B</sub> (Base Resistor)', 'MΩ', 'fixed emitter') }}
         {{ field('rc', 'R<sub>C</sub> (Collector Resistor)', 'kΩ') }}
-        {{ field('re', 'R<sub>E</sub> (Emitter Resistor)', 'kΩ') }}
+        {{ field('re', 'R<sub>E</sub> (Emitter Resistor)', 'kΩ', 'divider emitter') }}
         {{ field('beta', 'β (Current Gain)', '—') }}
         {{ field('vbe', 'V<sub>BE</sub> (Base-Emitter Voltage)', 'V') }}
 
@@ -85,62 +105,85 @@
         <span class="card-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="22" height="22"><g fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><line x1="7.6" y1="7.1" x2="10.6" y2="16.3"/><line x1="16.4" y1="7.1" x2="13.4" y2="16.3"/><line x1="8" y1="6" x2="16" y2="6"/></g></svg>
         </span>
-        Circuit: Common-Emitter Amplifier
+        Circuit: <span id="circuit-mode-title">{{ selected_mode_label }}</span>
       </h2>
 
-      <svg class="circuit-svg" viewBox="0 0 360 430" role="img"
+      <svg class="circuit-svg" viewBox="0 0 360 420" role="img"
            aria-label="Common-emitter amplifier circuit">
-        <defs>
-          <marker id="emitter-arrow" viewBox="0 0 10 10" refX="9" refY="5"
-                  markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="#334155"/>
-          </marker>
-        </defs>
-        <text x="180" y="22" class="svg-value" text-anchor="middle">VCC = {{ form.get('vcc', '') }} {{ form.get('vcc_unit', 'V') }}</text>
-        <line x1="120" y1="38" x2="240" y2="38" class="wire"/>
-        <line x1="120" y1="38" x2="120" y2="70" class="wire"/>
-        <line x1="240" y1="38" x2="240" y2="70" class="wire"/>
+        <!-- Top VCC Supply Rail -->
+        <text x="170" y="22" class="svg-value" text-anchor="middle" id="svg-vcc-val">VCC = {{ form.get('vcc', '') }} {{ form.get('vcc_unit', 'V') }}</text>
+        <line x1="110" y1="38" x2="228" y2="38" class="wire"/>
+        <line x1="110" y1="38" x2="110" y2="70" class="wire"/>
+        <line x1="228" y1="38" x2="228" y2="70" class="wire"/>
+        <circle cx="170" cy="38" r="3" fill="#334155"/>
 
-        <rect x="108" y="70" width="24" height="80" class="component"/>
-        <text x="70" y="104" class="svg-label" text-anchor="middle">R1</text>
-        <text x="70" y="124" class="svg-value" text-anchor="middle">{{ form.get('r1', '') }} {{ form.get('r1_unit', 'Ω') }}</text>
-        <line x1="120" y1="150" x2="120" y2="210" class="wire"/>
+        <!-- Upper Base Resistor (R1 for Divider, RB for Fixed/Emitter) -->
+        <rect x="98" y="70" width="24" height="76" class="component"/>
+        <text x="58" y="102" class="svg-label" text-anchor="middle" id="svg-upper-label">
+          {% if cur_mode == 'divider' %}R1{% else %}RB{% endif %}
+        </text>
+        <text x="58" y="122" class="svg-value" text-anchor="middle" id="svg-upper-val">
+          {% if cur_mode == 'divider' %}
+            {{ form.get('r1', '') }} {{ form.get('r1_unit', 'Ω') }}
+          {% else %}
+            {{ form.get('rb', '') }} {{ form.get('rb_unit', 'Ω') }}
+          {% endif %}
+        </text>
+        <line x1="110" y1="146" x2="110" y2="230" class="wire"/>
 
-        <line x1="120" y1="210" x2="175" y2="210" class="wire"/>
-        <line x1="175" y1="200" x2="175" y2="260" class="wire"/>
-        <line x1="175" y1="216" x2="203" y2="200" class="wire"/>
-        <line x1="175" y1="244" x2="203" y2="260" class="wire"
-              marker-end="url(#emitter-arrow)"/>
-        <line x1="203" y1="200" x2="240" y2="200" class="wire"/>
-        <line x1="203" y1="260" x2="240" y2="260" class="wire"/>
+        <!-- Horizontal Wire to Transistor Base -->
+        <line x1="110" y1="230" x2="198" y2="230" class="wire"/>
 
-        <circle cx="210" cy="230" r="30" class="component"/>
-        <text x="275" y="222" class="svg-label" text-anchor="middle">Q1</text>
-        <text x="275" y="240" class="svg-label" text-anchor="middle">NPN</text>
-        <text x="275" y="258" class="svg-value" text-anchor="middle">(β = {{ form.get('beta', '') }})</text>
+        <!-- Transistor Q1 (NPN) - Circle drawn first so internal electrodes & arrow are crisp -->
+        <circle cx="214" cy="230" r="32" class="component"/>
+        <!-- Base vertical bar inside circle -->
+        <line x1="198" y1="212" x2="198" y2="248" stroke="#1e293b" stroke-width="3.2" stroke-linecap="round"/>
+        <!-- Collector leg -->
+        <line x1="198" y1="221" x2="228" y2="203" class="wire"/>
+        <line x1="228" y1="203" x2="228" y2="146" class="wire"/>
+        <!-- Emitter leg + bold NPN outward arrowhead -->
+        <line x1="198" y1="239" x2="228" y2="257" class="wire"/>
+        <polygon points="225.5,255.5 212.5,254.0 218.2,244.8" fill="#1e293b"/>
+        <line x1="228" y1="257" x2="228" y2="278" class="wire"/>
 
-        <line x1="120" y1="210" x2="120" y2="250" class="wire"/>
-        <rect x="108" y="250" width="24" height="80" class="component"/>
-        <text x="70" y="284" class="svg-label" text-anchor="middle">R2</text>
-        <text x="70" y="304" class="svg-value" text-anchor="middle">{{ form.get('r2', '') }} {{ form.get('r2_unit', 'Ω') }}</text>
-        <line x1="120" y1="330" x2="120" y2="370" class="wire"/>
-        <line x1="100" y1="370" x2="140" y2="370" class="wire"/>
-        <line x1="108" y1="378" x2="132" y2="378" class="wire"/>
-        <line x1="116" y1="386" x2="124" y2="386" class="wire"/>
+        <!-- Q1 Labels -->
+        <text x="288" y="220" class="svg-label" text-anchor="middle">Q1</text>
+        <text x="288" y="238" class="svg-label" text-anchor="middle">NPN</text>
+        <text x="288" y="256" class="svg-value" text-anchor="middle" id="svg-beta-val">(β = {{ form.get('beta', '') }})</text>
 
-        <line x1="240" y1="200" x2="240" y2="150" class="wire"/>
-        <rect x="228" y="70" width="24" height="80" class="component"/>
-        <text x="290" y="104" class="svg-label" text-anchor="middle">RC</text>
-        <text x="290" y="124" class="svg-value" text-anchor="middle">{{ form.get('rc', '') }} {{ form.get('rc_unit', 'Ω') }}</text>
+        <!-- R2 Branch (Voltage Divider Only) -->
+        <g id="svg-r2-group" {% if cur_mode != 'divider' %}style="display:none"{% endif %}>
+          <circle cx="110" cy="230" r="3.5" fill="#334155"/>
+          <line x1="110" y1="230" x2="110" y2="258" class="wire"/>
+          <rect x="98" y="258" width="24" height="76" class="component"/>
+          <text x="58" y="290" class="svg-label" text-anchor="middle">R2</text>
+          <text x="58" y="310" class="svg-value" text-anchor="middle" id="svg-r2-val">{{ form.get('r2', '') }} {{ form.get('r2_unit', 'Ω') }}</text>
+          <line x1="110" y1="334" x2="110" y2="368" class="wire"/>
+          <line x1="92" y1="368" x2="128" y2="368" class="wire"/>
+          <line x1="98" y1="375" x2="122" y2="375" class="wire"/>
+          <line x1="104" y1="382" x2="116" y2="382" class="wire"/>
+        </g>
 
-        <line x1="240" y1="260" x2="240" y2="280" class="wire"/>
-        <rect x="228" y="280" width="24" height="80" class="component"/>
-        <text x="290" y="314" class="svg-label" text-anchor="middle">RE</text>
-        <text x="290" y="334" class="svg-value" text-anchor="middle">{{ form.get('re', '') }} {{ form.get('re_unit', 'Ω') }}</text>
-        <line x1="240" y1="360" x2="240" y2="390" class="wire"/>
-        <line x1="220" y1="390" x2="260" y2="390" class="wire"/>
-        <line x1="228" y1="398" x2="252" y2="398" class="wire"/>
-        <line x1="236" y1="406" x2="244" y2="406" class="wire"/>
+        <!-- Collector Resistor RC -->
+        <rect x="216" y="70" width="24" height="76" class="component"/>
+        <text x="288" y="102" class="svg-label" text-anchor="middle">RC</text>
+        <text x="288" y="122" class="svg-value" text-anchor="middle" id="svg-rc-val">{{ form.get('rc', '') }} {{ form.get('rc_unit', 'Ω') }}</text>
+
+        <!-- Emitter Branch (RE for Divider/Emitter, Direct Ground for Fixed) -->
+        <g id="svg-re-group" {% if cur_mode == 'fixed' %}style="display:none"{% endif %}>
+          <rect x="216" y="278" width="24" height="76" class="component"/>
+          <text x="288" y="310" class="svg-label" text-anchor="middle">RE</text>
+          <text x="288" y="330" class="svg-value" text-anchor="middle" id="svg-re-val">{{ form.get('re', '') }} {{ form.get('re_unit', 'Ω') }}</text>
+          <line x1="228" y1="354" x2="228" y2="384" class="wire"/>
+        </g>
+        <g id="svg-direct-gnd" {% if cur_mode != 'fixed' %}style="display:none"{% endif %}>
+          <line x1="228" y1="278" x2="228" y2="384" class="wire"/>
+        </g>
+
+        <!-- Emitter Ground -->
+        <line x1="210" y1="384" x2="246" y2="384" class="wire"/>
+        <line x1="216" y1="391" x2="240" y2="391" class="wire"/>
+        <line x1="222" y1="398" x2="234" y2="398" class="wire"/>
       </svg>
     </section>
 
@@ -151,8 +194,11 @@
         </span>
         DC Bias Results
       </h2>
+      <p class="small" style="margin-bottom: 10px;">Selected Mode: <strong>{{ selected_mode_label }}</strong></p>
 
-      {% if calculation_error %}
+      {% if errors %}
+        <div class="calc-error">Invalid input for <strong>{{ selected_mode_label }}</strong>. Please fix the highlighted fields above.</div>
+      {% elif calculation_error %}
         <div class="calc-error">{{ calculation_error }}</div>
       {% elif result %}
         <table class="results-table">
@@ -174,7 +220,7 @@
           </div>
         </div>
       {% else %}
-        <p class="placeholder">Enter circuit values and press Calculate DC Bias.</p>
+        <p class="placeholder">Select a bias mode, enter circuit values, and press Calculate DC Bias.</p>
       {% endif %}
     </section>
   </main>
@@ -182,7 +228,7 @@
   <div class="below-grid">
   {% if verification %}
     <section class="card verification-card">
-      <h2>Independent Verification</h2>
+      <h2>Independent Verification (Voltage Divider)</h2>
       <table class="verification-table">
         <thead>
           <tr>
@@ -207,7 +253,7 @@
       </table>
       <p class="verification-result {{ 'is-pass' if verification.matches else 'is-fail' }}">Verification: {{ "PASS" if verification.matches else "FAIL" }}</p>
     </section>
-  {% elif result %}
+  {% elif result and selected_mode == 'divider' %}
     <section class="card verification-card">
       <h2>Independent Verification</h2>
       <p class="note">Independent verification applies to the active region only.</p>
@@ -217,14 +263,88 @@
   <section class="goal-card">
     <div class="goal-title">
       <span class="goal-icon" aria-hidden="true">◎</span>
-      Week 2 Goal
+      Week 3 Goal
     </div>
-    <p>Rough target for this lab: Build a Flask web app that takes the circuit
-      parameters, computes the BJT DC bias
-      (V<sub>B</sub>, V<sub>E</sub>, V<sub>C</sub>, V<sub>CE</sub>,
-      I<sub>B</sub>, I<sub>C</sub>, I<sub>E</sub>) for a common-emitter
-      amplifier with voltage-divider bias, and displays the results.</p>
+    <p>Extend the Flask BJT DC Bias simulator to support three common-emitter configurations:
+      <strong>Voltage Divider Bias</strong>, <strong>Fixed Bias</strong>, and
+      <strong>Emitter Bias (Single Supply)</strong>, validating mode-specific inputs
+      and verifying results in a real browser.</p>
   </section>
   </div>
+
+  <script>
+    (function () {
+      const modeSelect = document.getElementById('mode');
+      const modeNames = {
+        divider: 'Voltage Divider Bias',
+        fixed: 'Fixed Bias',
+        emitter: 'Emitter Bias (Single Supply)'
+      };
+
+      function getFieldText(id) {
+        const input = document.getElementById(id);
+        const unit = document.querySelector('select[name="' + id + '_unit"]');
+        return (input ? input.value : '') + ' ' + (unit ? unit.value : '');
+      }
+
+      function updateModeUI() {
+        const mode = modeSelect.value;
+        document.querySelectorAll('[data-modes]').forEach(function (row) {
+          const allowed = row.getAttribute('data-modes').split(' ');
+          const active = allowed.includes(mode);
+          row.hidden = !active;
+          row.querySelectorAll('input, select').forEach(function (el) {
+            el.disabled = !active;
+          });
+        });
+
+        const titleEl = document.getElementById('circuit-mode-title');
+        if (titleEl && modeNames[mode]) titleEl.textContent = modeNames[mode];
+
+        const vccEl = document.getElementById('svg-vcc-val');
+        if (vccEl) vccEl.textContent = 'VCC = ' + getFieldText('vcc');
+
+        const betaEl = document.getElementById('svg-beta-val');
+        const betaIn = document.getElementById('beta');
+        if (betaEl && betaIn) betaEl.textContent = '(β = ' + betaIn.value + ')';
+
+        const upperLabel = document.getElementById('svg-upper-label');
+        const upperVal = document.getElementById('svg-upper-val');
+        if (upperLabel && upperVal) {
+          if (mode === 'divider') {
+            upperLabel.textContent = 'R1';
+            upperVal.textContent = getFieldText('r1');
+          } else {
+            upperLabel.textContent = 'RB';
+            upperVal.textContent = getFieldText('rb');
+          }
+        }
+
+        const r2Val = document.getElementById('svg-r2-val');
+        if (r2Val) r2Val.textContent = getFieldText('r2');
+
+        const rcVal = document.getElementById('svg-rc-val');
+        if (rcVal) rcVal.textContent = getFieldText('rc');
+
+        const reVal = document.getElementById('svg-re-val');
+        if (reVal) reVal.textContent = getFieldText('re');
+
+        const r2Group = document.getElementById('svg-r2-group');
+        if (r2Group) r2Group.style.display = (mode === 'divider') ? '' : 'none';
+
+        const reGroup = document.getElementById('svg-re-group');
+        const gndGroup = document.getElementById('svg-direct-gnd');
+        if (reGroup) reGroup.style.display = (mode === 'fixed') ? 'none' : '';
+        if (gndGroup) gndGroup.style.display = (mode === 'fixed') ? '' : 'none';
+      }
+
+      if (modeSelect) {
+        modeSelect.addEventListener('change', updateModeUI);
+        document.getElementById('bias-form').addEventListener('input', updateModeUI);
+        document.getElementById('bias-form').addEventListener('change', updateModeUI);
+        updateModeUI();
+      }
+    })();
+  </script>
 </body>
 </html>

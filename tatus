@@ -1,0 +1,970 @@
+[1mdiff --git a/app.py b/app.py[m
+[1mindex c3d97b2..9388568 100644[m
+[1m--- a/app.py[m
+[1m+++ b/app.py[m
+[36m@@ -4,11 +4,16 @@[m [mfrom flask import Flask, render_template, request[m
+ [m
+ from bjt import ([m
+     ACTIVE,[m
+[32m+[m[32m    BIAS_MODES,[m
+     CUTOFF,[m
+     DEFAULT_UNITS,[m
+[31m-    SATURATION,[m
+[31m-    analyze_bias,[m
+[31m-    validate_and_parse,[m
+[32m+[m[32m    MODE_LABELS,[m
+[32m+[m[32m    BiasInputs,[m
+[32m+[m[32m    BiasResult,[m
+[32m+[m[32m    calculate_emitter_bias,[m
+[32m+[m[32m    calculate_fixed_bias,[m
+[32m+[m[32m    calculate_voltage_divider,[m
+[32m+[m[32m    validate_and_parse_mode,[m
+ )[m
+ from verification import verify_active[m
+ [m
+[36m@@ -16,12 +21,15 @@[m [mfrom verification import verify_active[m
+ CALCULATION_ERROR = "These values do not produce a valid result."[m
+ [m
+ DEFAULT_FORM = {[m
+[32m+[m[32m    "mode": "divider",[m
+     "vcc": "12.0",[m
+     "vcc_unit": "V",[m
+     "r1": "100",[m
+     "r1_unit": "kΩ",[m
+     "r2": "22",[m
+     "r2_unit": "kΩ",[m
+[32m+[m[32m    "rb": "1",[m
+[32m+[m[32m    "rb_unit": "MΩ",[m
+     "rc": "2.2",[m
+     "rc_unit": "kΩ",[m
+     "re": "1.0",[m
+[36m@@ -37,19 +45,20 @@[m [mUNIT_OPTIONS = {[m
+     "vbe": ("V", "mV"),[m
+     "r1": ("Ω", "kΩ", "MΩ"),[m
+     "r2": ("Ω", "kΩ", "MΩ"),[m
+[32m+[m[32m    "rb": ("Ω", "kΩ", "MΩ"),[m
+     "rc": ("Ω", "kΩ", "MΩ"),[m
+     "re": ("Ω", "kΩ", "MΩ"),[m
+     "beta": ("—",),[m
+ }[m
+ [m
+[31m-DISPLAY_SCALES = ([m
+[31m-    ("ib_a", 1e6),[m
+[31m-    ("ic_a", 1e3),[m
+[31m-    ("ie_a", 1e3),[m
+[31m-    ("vb_v", 1.0),[m
+[31m-    ("vc_v", 1.0),[m
+[31m-    ("ve_v", 1.0),[m
+[31m-    ("vce_v", 1.0),[m
+[32m+[m[32mDISPLAY_KEYS = ([m
+[32m+[m[32m    "ib_ua",[m
+[32m+[m[32m    "ic_ma",[m
+[32m+[m[32m    "ie_ma",[m
+[32m+[m[32m    "vb_v",[m
+[32m+[m[32m    "vc_v",[m
+[32m+[m[32m    "ve_v",[m
+[32m+[m[32m    "vce_v",[m
+ )[m
+ [m
+ VERIFICATION_FIELDS = ([m
+[36m@@ -68,7 +77,7 @@[m [mdef _require_finite(values):[m
+         raise ValueError("calculation produced a non-finite display value")[m
+ [m
+ [m
+[31m-def _comparison_rows(main, verification):[m
+[32m+[m[32mdef _comparison_rows(main_dict, verification):[m
+     specs = ([m
+         ("IB", "ib_a", 1e6, "µA", 4),[m
+         ("IC", "ic_a", 1e3, "mA", 4),[m
+[36m@@ -79,9 +88,9 @@[m [mdef _comparison_rows(main, verification):[m
+         ("VCE", "vce_v", 1.0, "V", 4),[m
+     )[m
+     rows = [][m
+[31m-    for label, attr, scale, unit, decimals in specs:[m
+[31m-        main_value = getattr(main, attr) * scale[m
+[31m-        check_value = getattr(verification, attr) * scale[m
+[32m+[m[32m    for label, key, scale, unit, decimals in specs:[m
+[32m+[m[32m        main_value = main_dict[key] * scale[m
+[32m+[m[32m        check_value = getattr(verification, key) * scale[m
+         diff = abs(main_value - check_value)[m
+         _require_finite((main_value, check_value, diff))[m
+         rows.append([m
+[36m@@ -97,41 +106,42 @@[m [mdef _comparison_rows(main, verification):[m
+     return rows[m
+ [m
+ [m
+[31m-def _results_rows(result):[m
+[32m+[m[32mdef _results_rows(result_dict):[m
+     return [[m
+[31m-        {"label": "VB", "value": f"{result.vb_v:.2f}", "unit": "V"},[m
+[31m-        {"label": "VE", "value": f"{result.ve_v:.2f}", "unit": "V"},[m
+[31m-        {"label": "VC", "value": f"{result.vc_v:.2f}", "unit": "V"},[m
+[31m-        {"label": "VCE", "value": f"{result.vce_v:.2f}", "unit": "V"},[m
+[31m-        {"label": "IB", "value": f"{result.ib_a * 1e6:.1f}", "unit": "µA"},[m
+[31m-        {"label": "IC", "value": f"{result.ic_a * 1e3:.2f}", "unit": "mA"},[m
+[31m-        {"label": "IE", "value": f"{result.ie_a * 1e3:.2f}", "unit": "mA"},[m
+[32m+[m[32m        {"label": "VB", "value": f"{result_dict['vb_v']:.2f}", "unit": "V"},[m
+[32m+[m[32m        {"label": "VE", "value": f"{result_dict['ve_v']:.2f}", "unit": "V"},[m
+[32m+[m[32m        {"label": "VC", "value": f"{result_dict['vc_v']:.2f}", "unit": "V"},[m
+[32m+[m[32m        {"label": "VCE", "value": f"{result_dict['vce_v']:.2f}", "unit": "V"},[m
+[32m+[m[32m        {"label": "IB", "value": f"{result_dict['ib_ua']:.1f}", "unit": "µA"},[m
+[32m+[m[32m        {"label": "IC", "value": f"{result_dict['ic_ma']:.2f}", "unit": "mA"},[m
+[32m+[m[32m        {"label": "IE", "value": f"{result_dict['ie_ma']:.2f}", "unit": "mA"},[m
+     ][m
+ [m
+ [m
+[31m-def _region_card(result):[m
+[31m-    if result.region == ACTIVE:[m
+[32m+[m[32mdef _region_card(result_dict):[m
+[32m+[m[32m    region = result_dict["region"][m
+[32m+[m[32m    if region == ACTIVE:[m
+         return {[m
+             "kind": "ok",[m
+             "icon": "✓",[m
+             "title": "Active region approximation OK",[m
+             "detail": ([m
+[31m-                f"VCE = {result.vce_v:.3f} V > 0.2 V "[m
+[31m-                "(transistor in active region)"[m
+[32m+[m[32m                f"VCE = {result_dict['vce_v']:.3f} V > 0.2 V "[m
+[32m+[m[32m                "(transistor in forward-active region)"[m
+             ),[m
+         }[m
+[31m-    if result.region == CUTOFF:[m
+[32m+[m[32m    if region == CUTOFF:[m
+         return {[m
+             "kind": "cutoff",[m
+             "icon": "!",[m
+[31m-            "title": "Transistor is in cutoff",[m
+[31m-            "detail": "VBB ≤ VBE, so IB ≈ 0 and the transistor is off.",[m
+[32m+[m[32m            "title": "Cutoff Warning (Model Not Valid)",[m
+[32m+[m[32m            "detail": result_dict["warning"] or "IB ≤ 0 A; forward-active model may not be valid.",[m
+         }[m
+     return {[m
+         "kind": "saturation",[m
+         "icon": "!",[m
+[31m-        "title": "Transistor is in saturation",[m
+[31m-        "detail": "VCE ≤ 0.2 V; the linear VCE model is not valid.",[m
+[32m+[m[32m        "title": "Saturation Warning (Model Not Valid)",[m
+[32m+[m[32m        "detail": result_dict["warning"] or "VCE ≤ 0.2 V; forward-active model may not be valid.",[m
+     }[m
+ [m
+ [m
+[36m@@ -142,6 +152,9 @@[m [mdef create_app() -> Flask:[m
+     def index():[m
+         context = {[m
+             "form": dict(DEFAULT_FORM),[m
+[32m+[m[32m            "mode_labels": MODE_LABELS,[m
+[32m+[m[32m            "selected_mode": "divider",[m
+[32m+[m[32m            "selected_mode_label": MODE_LABELS["divider"],[m
+             "errors": {},[m
+             "result": None,[m
+             "verification": None,[m
+[36m@@ -155,36 +168,92 @@[m [mdef create_app() -> Flask:[m
+         if request.method == "GET":[m
+             return render_template("index.html", **context)[m
+ [m
+[31m-        inputs, errors = validate_and_parse(request.form)[m
+[31m-        submitted = request.form.to_dict()[m
+[32m+[m[32m        submitted = dict(DEFAULT_FORM)[m
+[32m+[m[32m        submitted.update(request.form.to_dict())[m
+         for field, unit in DEFAULT_UNITS.items():[m
+             submitted.setdefault(f"{field}_unit", unit)[m
+[32m+[m
+[32m+[m[32m        raw_mode = str(request.form.get("mode", "")).strip()[m
+         context["form"] = submitted[m
+[32m+[m[32m        context["selected_mode"] = raw_mode if raw_mode in BIAS_MODES else "invalid"[m
+[32m+[m[32m        context["selected_mode_label"] = MODE_LABELS.get(raw_mode, f"Unknown Mode ({raw_mode or 'empty'})")[m
+[32m+[m
+[32m+[m[32m        parsed, errors = validate_and_parse_mode(request.form)[m
+         if errors:[m
+             context["errors"] = errors[m
+             return render_template("index.html", **context)[m
+ [m
+[32m+[m[32m        mode = parsed["mode"][m
+         try:[m
+[31m-            result = analyze_bias(inputs)[m
+[31m-            _require_finite([m
+[31m-                getattr(result, attr) * scale for attr, scale in DISPLAY_SCALES[m
+[31m-            )[m
+[32m+[m[32m            if mode == "divider":[m
+[32m+[m[32m                result_dict = calculate_voltage_divider([m
+[32m+[m[32m                    vcc_v=float(parsed["vcc"]),[m
+[32m+[m[32m                    r1_ohm=float(parsed["r1"]),[m
+[32m+[m[32m                    r2_ohm=float(parsed["r2"]),[m
+[32m+[m[32m                    rc_ohm=float(parsed["rc"]),[m
+[32m+[m[32m                    re_ohm=float(parsed["re"]),[m
+[32m+[m[32m                    beta=float(parsed["beta"]),[m
+[32m+[m[32m                    vbe_v=float(parsed["vbe"]),[m
+[32m+[m[32m                )[m
+[32m+[m[32m            elif mode == "fixed":[m
+[32m+[m[32m                result_dict = calculate_fixed_bias([m
+[32m+[m[32m                    vcc_v=float(parsed["vcc"]),[m
+[32m+[m[32m                    rb_ohm=float(parsed["rb"]),[m
+[32m+[m[32m                    rc_ohm=float(parsed["rc"]),[m
+[32m+[m[32m                    beta=float(parsed["beta"]),[m
+[32m+[m[32m                    vbe_v=float(parsed["vbe"]),[m
+[32m+[m[32m                )[m
+[32m+[m[32m            elif mode == "emitter":[m
+[32m+[m[32m                result_dict = calculate_emitter_bias([m
+[32m+[m[32m                    vcc_v=float(parsed["vcc"]),[m
+[32m+[m[32m                    rb_ohm=float(parsed["rb"]),[m
+[32m+[m[32m                    rc_ohm=float(parsed["rc"]),[m
+[32m+[m[32m                    re_ohm=float(parsed["re"]),[m
+[32m+[m[32m                    beta=float(parsed["beta"]),[m
+[32m+[m[32m                    vbe_v=float(parsed["vbe"]),[m
+[32m+[m[32m                )[m
+[32m+[m[32m            else:[m
+[32m+[m[32m                context["errors"] = {"mode": "Unknown bias mode selected."}[m
+[32m+[m[32m                return render_template("index.html", **context)[m
+[32m+[m
+[32m+[m[32m            _require_finite(result_dict[k] for k in DISPLAY_KEYS)[m
+ [m
+             verification = None[m
+             comparison_rows = None[m
+[31m-            if result.region == ACTIVE:[m
+[31m-                verification = verify_active(inputs, result)[m
+[32m+[m[32m            if mode == "divider" and result_dict["region"] == ACTIVE:[m
+[32m+[m[32m                divider_inputs = BiasInputs([m
+[32m+[m[32m                    vcc_v=float(parsed["vcc"]),[m
+[32m+[m[32m                    r1_ohm=float(parsed["r1"]),[m
+[32m+[m[32m                    r2_ohm=float(parsed["r2"]),[m
+[32m+[m[32m                    rc_ohm=float(parsed["rc"]),[m
+[32m+[m[32m                    re_ohm=float(parsed["re"]),[m
+[32m+[m[32m                    beta=float(parsed["beta"]),[m
+[32m+[m[32m                    vbe_v=float(parsed["vbe"]),[m
+[32m+[m[32m                )[m
+[32m+[m[32m                divider_result = BiasResult([m
+[32m+[m[32m                    vbb_v=result_dict["vbb_v"],[m
+[32m+[m[32m                    rb_ohm=result_dict["rb_ohm"],[m
+[32m+[m[32m                    ib_a=result_dict["ib_a"],[m
+[32m+[m[32m                    ic_a=result_dict["ic_a"],[m
+[32m+[m[32m                    ie_a=result_dict["ie_a"],[m
+[32m+[m[32m                    vb_v=result_dict["vb_v"],[m
+[32m+[m[32m                    vc_v=result_dict["vc_v"],[m
+[32m+[m[32m                    ve_v=result_dict["ve_v"],[m
+[32m+[m[32m                    vce_v=result_dict["vce_v"],[m
+[32m+[m[32m                    region=result_dict["region"],[m
+[32m+[m[32m                )[m
+[32m+[m[32m                verification = verify_active(divider_inputs, divider_result)[m
+                 _require_finite([m
+                     getattr(verification, attr) for attr in VERIFICATION_FIELDS[m
+                 )[m
+[31m-                comparison_rows = _comparison_rows(result, verification)[m
+[32m+[m[32m                comparison_rows = _comparison_rows(result_dict, verification)[m
+         except (ValueError, OverflowError, ZeroDivisionError):[m
+[31m-            context["calculation_error"] = CALCULATION_ERROR[m
+[32m+[m[32m            context["calculation_error"] = f"[{context['selected_mode_label']}] {CALCULATION_ERROR}"[m
+             return render_template("index.html", **context)[m
+ [m
+[31m-        context["result"] = result[m
+[31m-        context["region_card"] = _region_card(result)[m
+[31m-        context["results_rows"] = _results_rows(result)[m
+[32m+[m[32m        context["result"] = result_dict[m
+[32m+[m[32m        context["region_card"] = _region_card(result_dict)[m
+[32m+[m[32m        context["results_rows"] = _results_rows(result_dict)[m
+         context["verification"] = verification[m
+         context["comparison_rows"] = comparison_rows[m
+ [m
+[36m@@ -197,4 +266,4 @@[m [mapp = create_app()[m
+ [m
+ [m
+ if __name__ == "__main__":[m
+[31m-    app.run(host="127.0.0.1", port=5000, debug=True)[m
+[32m+[m[32m    app.run(host="127.0.0.1", port=5000, debug=True)[m
+\ No newline at end of file[m
+[1mdiff --git a/bjt.py b/bjt.py[m
+[1mindex c99ef3d..70a28ed 100644[m
+[1m--- a/bjt.py[m
+[1m+++ b/bjt.py[m
+[36m@@ -6,6 +6,26 @@[m [mfrom typing import Mapping[m
+ REQUIRED_FIELDS = ("vcc", "r1", "r2", "rc", "re", "beta", "vbe")[m
+ RESISTANCE_FIELDS = ("r1", "r2", "rc", "re")[m
+ [m
+[32m+[m[32mBIAS_MODES = ("divider", "fixed", "emitter")[m
+[32m+[m
+[32m+[m[32mMODE_LABELS = {[m
+[32m+[m[32m    "divider": "Voltage Divider Bias",[m
+[32m+[m[32m    "fixed": "Fixed Bias",[m
+[32m+[m[32m    "emitter": "Emitter Bias (Single Supply)",[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mMODE_REQUIRED_FIELDS = {[m
+[32m+[m[32m    "divider": ("vcc", "r1", "r2", "rc", "re", "beta", "vbe"),[m
+[32m+[m[32m    "fixed": ("vcc", "rb", "rc", "beta", "vbe"),[m
+[32m+[m[32m    "emitter": ("vcc", "rb", "rc", "re", "beta", "vbe"),[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mMODE_RESISTANCE_FIELDS = {[m
+[32m+[m[32m    "divider": ("r1", "r2", "rc", "re"),[m
+[32m+[m[32m    "fixed": ("rb", "rc"),[m
+[32m+[m[32m    "emitter": ("rb", "rc", "re"),[m
+[32m+[m[32m}[m
+[32m+[m
+ VOLTAGE_UNITS = {"V": 1.0, "mV": 1e-3}[m
+ RESISTANCE_UNITS = {"Ω": 1.0, "kΩ": 1e3, "MΩ": 1e6}[m
+ BETA_UNITS = {"—": 1.0}[m
+[36m@@ -15,6 +35,7 @@[m [mUNIT_FACTORS = {[m
+     "vbe": VOLTAGE_UNITS,[m
+     "r1": RESISTANCE_UNITS,[m
+     "r2": RESISTANCE_UNITS,[m
+[32m+[m[32m    "rb": RESISTANCE_UNITS,[m
+     "rc": RESISTANCE_UNITS,[m
+     "re": RESISTANCE_UNITS,[m
+     "beta": BETA_UNITS,[m
+[36m@@ -25,6 +46,7 @@[m [mDEFAULT_UNITS = {[m
+     "vbe": "V",[m
+     "r1": "Ω",[m
+     "r2": "Ω",[m
+[32m+[m[32m    "rb": "Ω",[m
+     "rc": "Ω",[m
+     "re": "Ω",[m
+     "beta": "—",[m
+[36m@@ -62,6 +84,216 @@[m [mclass BiasResult:[m
+     region: str[m
+ [m
+ [m
+[32m+[m[32mdef _validate_finite_dict(data: dict) -> None:[m
+[32m+[m[32m    numeric_keys = ([m
+[32m+[m[32m        "ib_a",[m
+[32m+[m[32m        "ic_a",[m
+[32m+[m[32m        "ie_a",[m
+[32m+[m[32m        "ib_ua",[m
+[32m+[m[32m        "ic_ma",[m
+[32m+[m[32m        "ie_ma",[m
+[32m+[m[32m        "vb_v",[m
+[32m+[m[32m        "ve_v",[m
+[32m+[m[32m        "vc_v",[m
+[32m+[m[32m        "vce_v",[m
+[32m+[m[32m    )[m
+[32m+[m[32m    if not all(math.isfinite(data[k]) for k in numeric_keys):[m
+[32m+[m[32m        raise ValueError("calculation produced a non-finite result")[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef _build_bias_dict([m
+[32m+[m[32m    mode: str,[m
+[32m+[m[32m    vcc_v: float,[m
+[32m+[m[32m    rc_ohm: float,[m
+[32m+[m[32m    re_ohm: float,[m
+[32m+[m[32m    beta: float,[m
+[32m+[m[32m    vbe_v: float,[m
+[32m+[m[32m    ib_a: float,[m
+[32m+[m[32m    vth_v: float,[m
+[32m+[m[32m    rth_ohm: float,[m
+[32m+[m[32m) -> dict:[m
+[32m+[m[32m    if ib_a <= 0.0:[m
+[32m+[m[32m        result_dict = {[m
+[32m+[m[32m            "mode": mode,[m
+[32m+[m[32m            "mode_label": MODE_LABELS[mode],[m
+[32m+[m[32m            "vbb_v": vth_v,[m
+[32m+[m[32m            "rb_ohm": rth_ohm,[m
+[32m+[m[32m            "ib_a": 0.0,[m
+[32m+[m[32m            "ic_a": 0.0,[m
+[32m+[m[32m            "ie_a": 0.0,[m
+[32m+[m[32m            "ib_ua": 0.0,[m
+[32m+[m[32m            "ic_ma": 0.0,[m
+[32m+[m[32m            "ie_ma": 0.0,[m
+[32m+[m[32m            "vb_v": vth_v,[m
+[32m+[m[32m            "ve_v": 0.0,[m
+[32m+[m[32m            "vc_v": vcc_v,[m
+[32m+[m[32m            "vce_v": vcc_v,[m
+[32m+[m[32m            "region": CUTOFF,[m
+[32m+[m[32m            "warning": "Warning: IB <= 0 A (Cutoff). Forward-active model may not be valid.",[m
+[32m+[m[32m        }[m
+[32m+[m[32m        _validate_finite_dict(result_dict)[m
+[32m+[m[32m        return result_dict[m
+[32m+[m
+[32m+[m[32m    ic_a = beta * ib_a[m
+[32m+[m[32m    ie_a = (beta + 1.0) * ib_a[m
+[32m+[m[32m    ve_v = ie_a * re_ohm[m
+[32m+[m[32m    vb_v = ve_v + vbe_v[m
+[32m+[m[32m    vc_v = vcc_v - ic_a * rc_ohm[m
+[32m+[m[32m    vce_v = vc_v - ve_v[m
+[32m+[m
+[32m+[m[32m    if vce_v <= VCE_SAT_V:[m
+[32m+[m[32m        region = SATURATION[m
+[32m+[m[32m        warning = "Warning: VCE <= 0.2 V (Saturation). Forward-active model may not be valid."[m
+[32m+[m[32m    else:[m
+[32m+[m[32m        region = ACTIVE[m
+[32m+[m[32m        warning = None[m
+[32m+[m
+[32m+[m[32m    result_dict = {[m
+[32m+[m[32m        "mode": mode,[m
+[32m+[m[32m        "mode_label": MODE_LABELS[mode],[m
+[32m+[m[32m        "vbb_v": vth_v,[m
+[32m+[m[32m        "rb_ohm": rth_ohm,[m
+[32m+[m[32m        "ib_a": ib_a,[m
+[32m+[m[32m        "ic_a": ic_a,[m
+[32m+[m[32m        "ie_a": ie_a,[m
+[32m+[m[32m        "ib_ua": ib_a * 1e6,[m
+[32m+[m[32m        "ic_ma": ic_a * 1e3,[m
+[32m+[m[32m        "ie_ma": ie_a * 1e3,[m
+[32m+[m[32m        "vb_v": vb_v,[m
+[32m+[m[32m        "ve_v": ve_v,[m
+[32m+[m[32m        "vc_v": vc_v,[m
+[32m+[m[32m        "vce_v": vce_v,[m
+[32m+[m[32m        "region": region,[m
+[32m+[m[32m        "warning": warning,[m
+[32m+[m[32m    }[m
+[32m+[m[32m    _validate_finite_dict(result_dict)[m
+[32m+[m[32m    return result_dict[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef calculate_fixed_bias([m
+[32m+[m[32m    vcc_v: float,[m
+[32m+[m[32m    rb_ohm: float,[m
+[32m+[m[32m    rc_ohm: float,[m
+[32m+[m[32m    beta: float,[m
+[32m+[m[32m    vbe_v: float,[m
+[32m+[m[32m) -> dict:[m
+[32m+[m[32m    ib_a = (vcc_v - vbe_v) / rb_ohm[m
+[32m+[m[32m    return _build_bias_dict([m
+[32m+[m[32m        mode="fixed",[m
+[32m+[m[32m        vcc_v=vcc_v,[m
+[32m+[m[32m        rc_ohm=rc_ohm,[m
+[32m+[m[32m        re_ohm=0.0,[m
+[32m+[m[32m        beta=beta,[m
+[32m+[m[32m        vbe_v=vbe_v,[m
+[32m+[m[32m        ib_a=ib_a,[m
+[32m+[m[32m        vth_v=vcc_v,[m
+[32m+[m[32m        rth_ohm=rb_ohm,[m
+[32m+[m[32m    )[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef calculate_emitter_bias([m
+[32m+[m[32m    vcc_v: float,[m
+[32m+[m[32m    rb_ohm: float,[m
+[32m+[m[32m    rc_ohm: float,[m
+[32m+[m[32m    re_ohm: float,[m
+[32m+[m[32m    beta: float,[m
+[32m+[m[32m    vbe_v: float,[m
+[32m+[m[32m) -> dict:[m
+[32m+[m[32m    denominator = rb_ohm + (beta + 1.0) * re_ohm[m
+[32m+[m[32m    if not math.isfinite(denominator) or denominator <= 0:[m
+[32m+[m[32m        raise ValueError("calculation produced an invalid denominator")[m
+[32m+[m[32m    ib_a = (vcc_v - vbe_v) / denominator[m
+[32m+[m[32m    return _build_bias_dict([m
+[32m+[m[32m        mode="emitter",[m
+[32m+[m[32m        vcc_v=vcc_v,[m
+[32m+[m[32m        rc_ohm=rc_ohm,[m
+[32m+[m[32m        re_ohm=re_ohm,[m
+[32m+[m[32m        beta=beta,[m
+[32m+[m[32m        vbe_v=vbe_v,[m
+[32m+[m[32m        ib_a=ib_a,[m
+[32m+[m[32m        vth_v=vcc_v,[m
+[32m+[m[32m        rth_ohm=rb_ohm,[m
+[32m+[m[32m    )[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef calculate_voltage_divider([m
+[32m+[m[32m    vcc_v: float,[m
+[32m+[m[32m    r1_ohm: float,[m
+[32m+[m[32m    r2_ohm: float,[m
+[32m+[m[32m    rc_ohm: float,[m
+[32m+[m[32m    re_ohm: float,[m
+[32m+[m[32m    beta: float,[m
+[32m+[m[32m    vbe_v: float,[m
+[32m+[m[32m) -> dict:[m
+[32m+[m[32m    vth_v = vcc_v * r2_ohm / (r1_ohm + r2_ohm)[m
+[32m+[m[32m    rth_ohm = r1_ohm * r2_ohm / (r1_ohm + r2_ohm)[m
+[32m+[m[32m    denominator = rth_ohm + (beta + 1.0) * re_ohm[m
+[32m+[m[32m    if not math.isfinite(denominator) or denominator <= 0:[m
+[32m+[m[32m        raise ValueError("calculation produced an invalid denominator")[m
+[32m+[m[32m    ib_a = (vth_v - vbe_v) / denominator[m
+[32m+[m[32m    return _build_bias_dict([m
+[32m+[m[32m        mode="divider",[m
+[32m+[m[32m        vcc_v=vcc_v,[m
+[32m+[m[32m        rc_ohm=rc_ohm,[m
+[32m+[m[32m        re_ohm=re_ohm,[m
+[32m+[m[32m        beta=beta,[m
+[32m+[m[32m        vbe_v=vbe_v,[m
+[32m+[m[32m        ib_a=ib_a,[m
+[32m+[m[32m        vth_v=vth_v,[m
+[32m+[m[32m        rth_ohm=rth_ohm,[m
+[32m+[m[32m    )[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef validate_and_parse_mode([m
+[32m+[m[32m    raw: Mapping[str, str],[m
+[32m+[m[32m) -> tuple[dict[str, float | str] | None, dict[str, str]]:[m
+[32m+[m[32m    mode = str(raw.get("mode", "")).strip()[m
+[32m+[m[32m    if mode not in BIAS_MODES:[m
+[32m+[m[32m        return None, {"mode": "Unknown bias mode selected. Please choose a valid circuit mode."}[m
+[32m+[m
+[32m+[m[32m    required = MODE_REQUIRED_FIELDS[mode][m
+[32m+[m[32m    resistance_fields = MODE_RESISTANCE_FIELDS[mode][m
+[32m+[m[32m    values: dict[str, float | str] = {"mode": mode}[m
+[32m+[m[32m    errors: dict[str, str] = {}[m
+[32m+[m
+[32m+[m[32m    for field in required:[m
+[32m+[m[32m        text = str(raw.get(field, "")).strip()[m
+[32m+[m[32m        if not text:[m
+[32m+[m[32m            errors[field] = "Please enter this value"[m
+[32m+[m[32m            continue[m
+[32m+[m[32m        try:[m
+[32m+[m[32m            number = float(text)[m
+[32m+[m[32m        except ValueError:[m
+[32m+[m[32m            errors[field] = "Please enter a number"[m
+[32m+[m[32m            continue[m
+[32m+[m[32m        if not math.isfinite(number):[m
+[32m+[m[32m            errors[field] = "Please enter a finite number"[m
+[32m+[m[32m            continue[m
+[32m+[m[32m        unit = str(raw.get(f"{field}_unit", DEFAULT_UNITS[field])).strip()[m
+[32m+[m[32m        if unit not in UNIT_FACTORS[field]:[m
+[32m+[m[32m            errors[field] = "Please select a valid unit"[m
+[32m+[m[32m            continue[m
+[32m+[m[32m        values[field] = number * UNIT_FACTORS[field][unit][m
+[32m+[m
+[32m+[m[32m    if "vcc" in values and float(values["vcc"]) <= 0:[m
+[32m+[m[32m        errors["vcc"] = "VCC must be greater than 0 V"[m
+[32m+[m
+[32m+[m[32m    for field in resistance_fields:[m
+[32m+[m[32m        if field in values and float(values[field]) <= 0:[m
+[32m+[m[32m            errors[field] = "Resistance must be greater than 0 Ω"[m
+[32m+[m
+[32m+[m[32m    if "beta" in values and float(values["beta"]) < 1:[m
+[32m+[m[32m        errors["beta"] = "β must be at least 1"[m
+[32m+[m
+[32m+[m[32m    if "vbe" in values and not (0 <= float(values["vbe"]) <= 1.5):[m
+[32m+[m[32m        errors["vbe"] = "VBE must be between 0 and 1.5 V"[m
+[32m+[m
+[32m+[m[32m    if errors:[m
+[32m+[m[32m        return None, errors[m
+[32m+[m
+[32m+[m[32m    return values, {}[m
+[32m+[m
+[32m+[m
+ def validate_and_parse([m
+     raw: Mapping[str, str],[m
+ ) -> tuple[BiasInputs | None, dict[str, str]]:[m
+[36m@@ -118,59 +350,24 @@[m [mdef validate_and_parse([m
+ [m
+ [m
+ def analyze_bias(inputs: BiasInputs) -> BiasResult:[m
+[31m-    vbb_v = inputs.vcc_v * inputs.r2_ohm / (inputs.r1_ohm + inputs.r2_ohm)[m
+[31m-    rb_ohm = inputs.r1_ohm * inputs.r2_ohm / (inputs.r1_ohm + inputs.r2_ohm)[m
+[31m-[m
+[31m-    if vbb_v <= inputs.vbe_v:[m
+[31m-        result = BiasResult([m
+[31m-            vbb_v=vbb_v,[m
+[31m-            rb_ohm=rb_ohm,[m
+[31m-            ib_a=0.0,[m
+[31m-            ic_a=0.0,[m
+[31m-            ie_a=0.0,[m
+[31m-            vb_v=vbb_v,[m
+[31m-            vc_v=inputs.vcc_v,[m
+[31m-            ve_v=0.0,[m
+[31m-            vce_v=inputs.vcc_v,[m
+[31m-            region=CUTOFF,[m
+[31m-        )[m
+[31m-    else:[m
+[31m-        denominator = rb_ohm + (inputs.beta + 1) * inputs.re_ohm[m
+[31m-        if not math.isfinite(denominator):[m
+[31m-            raise ValueError("calculation produced a non-finite denominator")[m
+[31m-        ib_a = (vbb_v - inputs.vbe_v) / denominator[m
+[31m-        ic_a = inputs.beta * ib_a[m
+[31m-        ie_a = (inputs.beta + 1) * ib_a[m
+[31m-        ve_v = ie_a * inputs.re_ohm[m
+[31m-        vc_v = inputs.vcc_v - ic_a * inputs.rc_ohm[m
+[31m-        vb_v = inputs.vbe_v + ve_v[m
+[31m-        vce_v = vc_v - ve_v[m
+[31m-        region = SATURATION if vce_v <= VCE_SAT_V else ACTIVE[m
+[31m-        result = BiasResult([m
+[31m-            vbb_v=vbb_v,[m
+[31m-            rb_ohm=rb_ohm,[m
+[31m-            ib_a=ib_a,[m
+[31m-            ic_a=ic_a,[m
+[31m-            ie_a=ie_a,[m
+[31m-            vb_v=vb_v,[m
+[31m-            vc_v=vc_v,[m
+[31m-            ve_v=ve_v,[m
+[31m-            vce_v=vce_v,[m
+[31m-            region=region,[m
+[31m-        )[m
+[31m-[m
+[31m-    numeric_values = ([m
+[31m-        result.vbb_v,[m
+[31m-        result.rb_ohm,[m
+[31m-        result.ib_a,[m
+[31m-        result.ic_a,[m
+[31m-        result.ie_a,[m
+[31m-        result.vb_v,[m
+[31m-        result.vc_v,[m
+[31m-        result.ve_v,[m
+[31m-        result.vce_v,[m
+[32m+[m[32m    res = calculate_voltage_divider([m
+[32m+[m[32m        vcc_v=inputs.vcc_v,[m
+[32m+[m[32m        r1_ohm=inputs.r1_ohm,[m
+[32m+[m[32m        r2_ohm=inputs.r2_ohm,[m
+[32m+[m[32m        rc_ohm=inputs.rc_ohm,[m
+[32m+[m[32m        re_ohm=inputs.re_ohm,[m
+[32m+[m[32m        beta=inputs.beta,[m
+[32m+[m[32m        vbe_v=inputs.vbe_v,[m
+     )[m
+[31m-    if not all(math.isfinite(value) for value in numeric_values):[m
+[31m-        raise ValueError("calculation produced a non-finite result")[m
+[31m-[m
+[31m-    return result[m
+[32m+[m[32m    return BiasResult([m
+[32m+[m[32m        vbb_v=res["vbb_v"],[m
+[32m+[m[32m        rb_ohm=res["rb_ohm"],[m
+[32m+[m[32m        ib_a=res["ib_a"],[m
+[32m+[m[32m        ic_a=res["ic_a"],[m
+[32m+[m[32m        ie_a=res["ie_a"],[m
+[32m+[m[32m        vb_v=res["vb_v"],[m
+[32m+[m[32m        vc_v=res["vc_v"],[m
+[32m+[m[32m        ve_v=res["ve_v"],[m
+[32m+[m[32m        vce_v=res["vce_v"],[m
+[32m+[m[32m        region=res["region"],[m
+[32m+[m[32m    )[m
+\ No newline at end of file[m
+[1mdiff --git a/templates/index.html b/templates/index.html[m
+[1mindex 114aad0..8a07a40 100644[m
+[1m--- a/templates/index.html[m
+[1m+++ b/templates/index.html[m
+[36m@@ -3,17 +3,24 @@[m
+ <head>[m
+   <meta charset="utf-8">[m
+   <meta name="viewport" content="width=device-width, initial-scale=1">[m
+[31m-  <title>Lab 02: BJT DC Bias Web App</title>[m
+[32m+[m[32m  <title>Lab 03: BJT DC Bias Web App</title>[m
+   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">[m
+ </head>[m
+ <body>[m
+[31m-  {% macro field(name, label, default_unit) %}[m
+[31m-    <div class="field-row">[m
+[32m+[m[32m  {% set cur_mode = selected_mode if selected_mode in mode_labels else 'divider' %}[m
+[32m+[m
+[32m+[m[32m  {% macro field(name, label, default_unit, modes_attr='') %}[m
+[32m+[m[32m    {% set is_visible = (not modes_attr) or (cur_mode in modes_attr.split()) %}[m
+[32m+[m[32m    <div class="field-row"[m
+[32m+[m[32m         {% if modes_attr %}data-modes="{{ modes_attr }}"{% endif %}[m
+[32m+[m[32m         {% if not is_visible %}hidden{% endif %}>[m
+       <label for="{{ name }}">{{ label|safe }}</label>[m
+       <div class="field-control">[m
+         <input id="{{ name }}" name="{{ name }}" type="text" inputmode="decimal"[m
+[31m-               value="{{ form.get(name, '') }}">[m
+[31m-        <select name="{{ name }}_unit" aria-label="{{ name }} unit">[m
+[32m+[m[32m               value="{{ form.get(name, '') }}"[m
+[32m+[m[32m               {% if not is_visible %}disabled{% endif %}>[m
+[32m+[m[32m        <select name="{{ name }}_unit" aria-label="{{ name }} unit"[m
+[32m+[m[32m                {% if not is_visible %}disabled{% endif %}>[m
+           {% for unit in unit_options[name] %}[m
+             <option value="{{ unit }}"{% if form.get(name ~ '_unit', default_unit) == unit %} selected{% endif %}>{{ unit }}</option>[m
+           {% endfor %}[m
+[36m@@ -38,8 +45,8 @@[m
+         </svg>[m
+       </span>[m
+       <div class="brand-text">[m
+[31m-        <h1>Lab 02: BJT DC Bias Web App</h1>[m
+[31m-        <p>ENG29 2121 – Common Emitter (Voltage Divider Bias)</p>[m
+[32m+[m[32m        <h1>Lab 03: BJT DC Bias Web App</h1>[m
+[32m+[m[32m        <p>ENG29 2121 – Common Emitter ({{ selected_mode_label }})</p>[m
+       </div>[m
+     </div>[m
+     <div class="course-badge">[m
+[36m@@ -57,12 +64,25 @@[m
+         Input Parameters[m
+       </h2>[m
+ [m
+[31m-      <form method="post" action="/" class="bias-form">[m
+[32m+[m[32m      <form method="post" action="/" class="bias-form" id="bias-form">[m
+[32m+[m[32m        <div class="field-row">[m
+[32m+[m[32m          <label for="mode">Bias Configuration (Mode)</label>[m
+[32m+[m[32m          <div class="field-control">[m
+[32m+[m[32m            <select id="mode" name="mode" style="width: 100%;">[m
+[32m+[m[32m              {% for mode_key, mode_name in mode_labels.items() %}[m
+[32m+[m[32m                <option value="{{ mode_key }}"{% if form.get('mode', 'divider') == mode_key %} selected{% endif %}>{{ mode_name }}</option>[m
+[32m+[m[32m              {% endfor %}[m
+[32m+[m[32m            </select>[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m          {% if errors.get('mode') %}<span class="error">{{ errors.get('mode') }}</span>{% endif %}[m
+[32m+[m[32m        </div>[m
+[32m+[m
+         {{ field('vcc', 'V<sub>CC</sub> (Supply Voltage)', 'V') }}[m
+[31m-        {{ field('r1', 'R<sub>1</sub> (Upper Divider)', 'kΩ') }}[m
+[31m-        {{ field('r2', 'R<sub>2</sub> (Lower Divider)', 'kΩ') }}[m
+[32m+[m[32m        {{ field('r1', 'R<sub>1</sub> (Upper Divider)', 'kΩ', 'divider') }}[m
+[32m+[m[32m        {{ field('r2', 'R<sub>2</sub> (Lower Divider)', 'kΩ', 'divider') }}[m
+[32m+[m[32m        {{ field('rb', 'R<sub>B</sub> (Base Resistor)', 'MΩ', 'fixed emitter') }}[m
+         {{ field('rc', 'R<sub>C</sub> (Collector Resistor)', 'kΩ') }}[m
+[31m-        {{ field('re', 'R<sub>E</sub> (Emitter Resistor)', 'kΩ') }}[m
+[32m+[m[32m        {{ field('re', 'R<sub>E</sub> (Emitter Resistor)', 'kΩ', 'divider emitter') }}[m
+         {{ field('beta', 'β (Current Gain)', '—') }}[m
+         {{ field('vbe', 'V<sub>BE</sub> (Base-Emitter Voltage)', 'V') }}[m
+ [m
+[36m@@ -85,62 +105,85 @@[m
+         <span class="card-icon" aria-hidden="true">[m
+           <svg viewBox="0 0 24 24" width="22" height="22"><g fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><line x1="7.6" y1="7.1" x2="10.6" y2="16.3"/><line x1="16.4" y1="7.1" x2="13.4" y2="16.3"/><line x1="8" y1="6" x2="16" y2="6"/></g></svg>[m
+         </span>[m
+[31m-        Circuit: Common-Emitter Amplifier[m
+[32m+[m[32m        Circuit: <span id="circuit-mode-title">{{ selected_mode_label }}</span>[m
+       </h2>[m
+ [m
+[31m-      <svg class="circuit-svg" viewBox="0 0 360 430" role="img"[m
+[32m+[m[32m      <svg class="circuit-svg" viewBox="0 0 360 420" role="img"[m
+            aria-label="Common-emitter amplifier circuit">[m
+[31m-        <defs>[m
+[31m-          <marker id="emitter-arrow" viewBox="0 0 10 10" refX="9" refY="5"[m
+[31m-                  markerWidth="7" markerHeight="7" orient="auto-start-reverse">[m
+[31m-            <path d="M 0 0 L 10 5 L 0 10 z" fill="#334155"/>[m
+[31m-          </marker>[m
+[31m-        </defs>[m
+[31m-        <text x="180" y="22" class="svg-value" text-anchor="middle">VCC = {{ form.get('vcc', '') }} {{ form.get('vcc_unit', 'V') }}</text>[m
+[31m-        <line x1="120" y1="38" x2="240" y2="38" class="wire"/>[m
+[31m-        <line x1="120" y1="38" x2="120" y2="70" class="wire"/>[m
+[31m-        <line x1="240" y1="38" x2="240" y2="70" class="wire"/>[m
+[31m-[m
+[31m-        <rect x="108" y="70" width="24" height="80" class="component"/>[m
+[31m-        <text x="70" y="104" class="svg-label" text-anchor="middle">R1</text>[m
+[31m-        <text x="70" y="124" class="svg-value" text-anchor="middle">{{ form.get('r1', '') }} {{ form.get('r1_unit', 'Ω') }}</text>[m
+[31m-        <line x1="120" y1="150" x2="120" y2="210" class="wire"/>[m
+[31m-[m
+[31m-        <line x1="120" y1="210" x2="175" y2="210" class="wire"/>[m
+[31m-        <line x1="175" y1="200" x2="175" y2="260" class="wire"/>[m
+[31m-        <line x1="175" y1="216" x2="203" y2="200" class="wire"/>[m
+[31m-        <line x1="175" y1="244" x2="203" y2="260" class="wire"[m
+[31m-              marker-end="url(#emitter-arrow)"/>[m
+[31m-        <line x1="203" y1="200" x2="240" y2="200" class="wire"/>[m
+[31m-        <line x1="203" y1="260" x2="240" y2="260" class="wire"/>[m
+[31m-[m
+[31m-        <circle cx="210" cy="230" r="30" class="component"/>[m
+[31m-        <text x="275" y="222" class="svg-label" text-anchor="middle">Q1</text>[m
+[31m-        <text x="275" y="240" class="svg-label" text-anchor="middle">NPN</text>[m
+[31m-        <text x="275" y="258" class="svg-value" text-anchor="middle">(β = {{ form.get('beta', '') }})</text>[m
+[31m-[m
+[31m-        <line x1="120" y1="210" x2="120" y2="250" class="wire"/>[m
+[31m-        <rect x="108" y="250" width="24" height="80" class="component"/>[m
+[31m-        <text x="70" y="284" class="svg-label" text-anchor="middle">R2</text>[m
+[31m-        <text x="70" y="304" class="svg-value" text-anchor="middle">{{ form.get('r2', '') }} {{ form.get('r2_unit', 'Ω') }}</text>[m
+[31m-        <line x1="120" y1="330" x2="120" y2="370" class="wire"/>[m
+[31m-        <line x1="100" y1="370" x2="140" y2="370" class="wire"/>[m
+[31m-        <line x1="108" y1="378" x2="132" y2="378" class="wire"/>[m
+[31m-        <line x1="116" y1="386" x2="124" y2="386" class="wire"/>[m
+[31m-[m
+[31m-        <line x1="240" y1="200" x2="240" y2="150" class="wire"/>[m
+[31m-        <rect x="228" y="70" width="24" height="80" class="component"/>[m
+[31m-        <text x="290" y="104" class="svg-label" text-anchor="middle">RC</text>[m
+[31m-        <text x="290" y="124" class="svg-value" text-anchor="middle">{{ form.get('rc', '') }} {{ form.get('rc_unit', 'Ω') }}</text>[m
+[31m-[m
+[31m-        <line x1="240" y1="260" x2="240" y2="280" class="wire"/>[m
+[31m-        <rect x="228" y="280" width="24" height="80" class="component"/>[m
+[31m-        <text x="290" y="314" class="svg-label" text-anchor="middle">RE</text>[m
+[31m-        <text x="290" y="334" class="svg-value" text-anchor="middle">{{ form.get('re', '') }} {{ form.get('re_unit', 'Ω') }}</text>[m
+[31m-        <line x1="240" y1="360" x2="240" y2="390" class="wire"/>[m
+[31m-        <line x1="220" y1="390" x2="260" y2="390" class="wire"/>[m
+[31m-        <line x1="228" y1="398" x2="252" y2="398" class="wire"/>[m
+[31m-        <line x1="236" y1="406" x2="244" y2="406" class="wire"/>[m
+[32m+[m[32m        <!-- Top VCC Supply Rail -->[m
+[32m+[m[32m        <text x="170" y="22" class="svg-value" text-anchor="middle" id="svg-vcc-val">VCC = {{ form.get('vcc', '') }} {{ form.get('vcc_unit', 'V') }}</text>[m
+[32m+[m[32m        <line x1="110" y1="38" x2="228" y2="38" class="wire"/>[m
+[32m+[m[32m        <line x1="110" y1="38" x2="110" y2="70" class="wire"/>[m
+[32m+[m[32m        <line x1="228" y1="38" x2="228" y2="70" class="wire"/>[m
+[32m+[m[32m        <circle cx="170" cy="38" r="3" fill="#334155"/>[m
+[32m+[m
+[32m+[m[32m        <!-- Upper Base Resistor (R1 for Divider, RB for Fixed/Emitter) -->[m
+[32m+[m[32m        <rect x="98" y="70" width="24" height="76" class="component"/>[m
+[32m+[m[32m        <text x="58" y="102" class="svg-label" text-anchor="middle" id="svg-upper-label">[m
+[32m+[m[32m          {% if cur_mode == 'divider' %}R1{% else %}RB{% endif %}[m
+[32m+[m[32m        </text>[m
+[32m+[m[32m        <text x="58" y="122" class="svg-value" text-anchor="middle" id="svg-upper-val">[m
+[32m+[m[32m          {% if cur_mode == 'divider' %}[m
+[32m+[m[32m            {{ form.get('r1', '') }} {{ form.get('r1_unit', 'Ω') }}[m
+[32m+[m[32m          {% else %}[m
+[32m+[m[32m            {{ form.get('rb', '') }} {{ form.get('rb_unit', 'Ω') }}[m
+[32m+[m[32m          {% endif %}[m
+[32m+[m[32m        </text>[m
+[32m+[m[32m        <line x1="110" y1="146" x2="110" y2="230" class="wire"/>[m
+[32m+[m
+[32m+[m[32m        <!-- Horizontal Wire to Transistor Base -->[m
+[32m+[m[32m        <line x1="110" y1="230" x2="198" y2="230" class="wire"/>[m
+[32m+[m
+[32m+[m[32m        <!-- Transistor Q1 (NPN) - Circle drawn first so internal electrodes & arrow are crisp -->[m
+[32m+[m[32m        <circle cx="214" cy="230" r="32" class="component"/>[m
+[32m+[m[32m        <!-- Base vertical bar inside circle -->[m
+[32m+[m[32m        <line x1="198" y1="212" x2="198" y2="248" stroke="#1e293b" stroke-width="3.2" stroke-linecap="round"/>[m
+[32m+[m[32m        <!-- Collector leg -->[m
+[32m+[m[32m        <line x1="198" y1="221" x2="228" y2="203" class="wire"/>[m
+[32m+[m[32m        <line x1="228" y1="203" x2="228" y2="146" class="wire"/>[m
+[32m+[m[32m        <!-- Emitter leg + bold NPN outward arrowhead -->[m
+[32m+[m[32m        <line x1="198" y1="239" x2="228" y2="257" class="wire"/>[m
+[32m+[m[32m        <polygon points="225.5,255.5 212.5,254.0 218.2,244.8" fill="#1e293b"/>[m
+[32m+[m[32m        <line x1="228" y1="257" x2="228" y2="278" class="wire"/>[m
+[32m+[m
+[32m+[m[32m        <!-- Q1 Labels -->[m
+[32m+[m[32m        <text x="288" y="220" class="svg-label" text-anchor="middle">Q1</text>[m
+[32m+[m[32m        <text x="288" y="238" class="svg-label" text-anchor="middle">NPN</text>[m
+[32m+[m[32m        <text x="288" y="256" class="svg-value" text-anchor="middle" id="svg-beta-val">(β = {{ form.get('beta', '') }})</text>[m
+[32m+[m
+[32m+[m[32m        <!-- R2 Branch (Voltage Divider Only) -->[m
+[32m+[m[32m        <g id="svg-r2-group" {% if cur_mode != 'divider' %}style="display:none"{% endif %}>[m
+[32m+[m[32m          <circle cx="110" cy="230" r="3.5" fill="#334155"/>[m
+[32m+[m[32m          <line x1="110" y1="230" x2="110" y2="258" class="wire"/>[m
+[32m+[m[32m          <rect x="98" y="258" width="24" height="76" class="component"/>[m
+[32m+[m[32m          <text x="58" y="290" class="svg-label" text-anchor="middle">R2</text>[m
+[32m+[m[32m          <text x="58" y="310" class="svg-value" text-anchor="middle" id="svg-r2-val">{{ form.get('r2', '') }} {{ form.get('r2_unit', 'Ω') }}</text>[m
+[32m+[m[32m          <line x1="110" y1="334" x2="110" y2="368" class="wire"/>[m
+[32m+[m[32m          <line x1="92" y1="368" x2="128" y2="368" class="wire"/>[m
+[32m+[m[32m          <line x1="98" y1="375" x2="122" y2="375" class="wire"/>[m
+[32m+[m[32m          <line x1="104" y1="382" x2="116" y2="382" class="wire"/>[m
+[32m+[m[32m        </g>[m
+[32m+[m
+[32m+[m[32m        <!-- Collector Resistor RC -->[m
+[32m+[m[32m        <rect x="216" y="70" width="24" height="76" class="component"/>[m
+[32m+[m[32m        <text x="288" y="102" class="svg-label" text-anchor="middle">RC</text>[m
+[32m+[m[32m        <text x="288" y="122" class="svg-value" text-anchor="middle" id="svg-rc-val">{{ form.get('rc', '') }} {{ form.get('rc_unit', 'Ω') }}</text>[m
+[32m+[m
+[32m+[m[32m        <!-- Emitter Branch (RE for Divider/Emitter, Direct Ground for Fixed) -->[m
+[32m+[m[32m        <g id="svg-re-group" {% if cur_mode == 'fixed' %}style="display:none"{% endif %}>[m
+[32m+[m[32m          <rect x="216" y="278" width="24" height="76" class="component"/>[m
+[32m+[m[32m          <text x="288" y="310" class="svg-label" text-anchor="middle">RE</text>[m
+[32m+[m[32m          <text x="288" y="330" class="svg-value" text-anchor="middle" id="svg-re-val">{{ form.get('re', '') }} {{ form.get('re_unit', 'Ω') }}</text>[m
+[32m+[m[32m          <line x1="228" y1="354" x2="228" y2="384" class="wire"/>[m
+[32m+[m[32m        </g>[m
+[32m+[m[32m        <g id="svg-direct-gnd" {% if cur_mode != 'fixed' %}style="display:none"{% endif %}>[m
+[32m+[m[32m          <line x1="228" y1="278" x2="228" y2="384" class="wire"/>[m
+[32m+[m[32m        </g>[m
+[32m+[m
+[32m+[m[32m        <!-- Emitter Ground -->[m
+[32m+[m[32m        <line x1="210" y1="384" x2="246" y2="384" class="wire"/>[m
+[32m+[m[32m        <line x1="216" y1="391" x2="240" y2="391" class="wire"/>[m
+[32m+[m[32m        <line x1="222" y1="398" x2="234" y2="398" class="wire"/>[m
+       </svg>[m
+     </section>[m
+ [m
+[36m@@ -151,8 +194,11 @@[m
+         </span>[m
+         DC Bias Results[m
+       </h2>[m
+[32m+[m[32m      <p class="small" style="margin-bottom: 10px;">Selected Mode: <strong>{{ selected_mode_label }}</strong></p>[m
+ [m
+[31m-      {% if calculation_error %}[m
+[32m+[m[32m      {% if errors %}[m
+[32m+[m[32m        <div class="calc-error">Invalid input for <strong>{{ selected_mode_label }}</strong>. Please fix the highlighted fields above.</div>[m
+[32m+[m[32m      {% elif calculation_error %}[m
+         <div class="calc-error">{{ calculation_error }}</div>[m
+       {% elif result %}[m
+         <table class="results-table">[m
+[36m@@ -174,7 +220,7 @@[m
+           </div>[m
+         </div>[m
+       {% else %}[m
+[31m-        <p class="placeholder">Enter circuit values and press Calculate DC Bias.</p>[m
+[32m+[m[32m        <p class="placeholder">Select a bias mode, enter circuit values, and press Calculate DC Bias.</p>[m
+       {% endif %}[m
+     </section>[m
+   </main>[m
+[36m@@ -182,7 +228,7 @@[m
+   <div class="below-grid">[m
+   {% if verification %}[m
+     <section class="card verification-card">[m
+[31m-      <h2>Independent Verification</h2>[m
+[32m+[m[32m      <h2>Independent Verification (Voltage Divider)</h2>[m
+       <table class="verification-table">[m
+         <thead>[m
+           <tr>[m
+[36m@@ -207,7 +253,7 @@[m
+       </table>[m
+       <p class="verification-result {{ 'is-pass' if verification.matches else 'is-fail' }}">Verification: {{ "PASS" if verification.matches else "FAIL" }}</p>[m
+     </section>[m
+[31m-  {% elif result %}[m
+[32m+[m[32m  {% elif result and selected_mode == 'divider' %}[m
+     <section class="card verification-card">[m
+       <h2>Independent Verification</h2>[m
+       <p class="note">Independent verification applies to the active region only.</p>[m
+[36m@@ -217,14 +263,88 @@[m
+   <section class="goal-card">[m
+     <div class="goal-title">[m
+       <span class="goal-icon" aria-hidden="true">◎</span>[m
+[31m-      Week 2 Goal[m
+[32m+[m[32m      Week 3 Goal[m
+     </div>[m
+[31m-    <p>Rough target for this lab: Build a Flask web app that takes the circuit[m
+[31m-      parameters, computes the BJT DC bias[m
+[31m-      (V<sub>B</sub>, V<sub>E</sub>, V<sub>C</sub>, V<sub>CE</sub>,[m
+[31m-      I<sub>B</sub>, I<sub>C</sub>, I<sub>E</sub>) for a common-emitter[m
+[31m-      amplifier with voltage-divider bias, and displays the results.</p>[m
+[32m+[m[32m    <p>Extend the Flask BJT DC Bias simulator to support three common-emitter configurations:[m
+[32m+[m[32m      <strong>Voltage Divider Bias</strong>, <strong>Fixed Bias</strong>, and[m
+[32m+[m[32m      <strong>Emitter Bias (Single Supply)</strong>, validating mode-specific inputs[m
+[32m+[m[32m      and verifying results in a real browser.</p>[m
+   </section>[m
+   </div>[m
+[32m+[m
+[32m+[m[32m  <script>[m
+[32m+[m[32m    (function () {[m
+[32m+[m[32m      const modeSelect = document.getElementById('mode');[m
+[32m+[m[32m      const modeNames = {[m
+[32m+[m[32m        divider: 'Voltage Divider Bias',[m
+[32m+[m[32m        fixed: 'Fixed Bias',[m
+[32m+[m[32m        emitter: 'Emitter Bias (Single Supply)'[m
+[32m+[m[32m      };[m
+[32m+[m
+[32m+[m[32m      function getFieldText(id) {[m
+[32m+[m[32m        const input = document.getElementById(id);[m
+[32m+[m[32m        const unit = document.querySelector('select[name="' + id + '_unit"]');[m
+[32m+[m[32m        return (input ? input.value : '') + ' ' + (unit ? unit.value : '');[m
+[32m+[m[32m      }[m
+[32m+[m
+[32m+[m[32m      function updateModeUI() {[m
+[32m+[m[32m        const mode = modeSelect.value;[m
+[32m+[m[32m        document.querySelectorAll('[data-modes]').forEach(function (row) {[m
+[32m+[m[32m          const allowed = row.getAttribute('data-modes').split(' ');[m
+[32m+[m[32m          const active = allowed.includes(mode);[m
+[32m+[m[32m          row.hidden = !active;[m
+[32m+[m[32m          row.querySelectorAll('input, select').forEach(function (el) {[m
+[32m+[m[32m            el.disabled = !active;[m
+[32m+[m[32m          });[m
+[32m+[m[32m        });[m
+[32m+[m
+[32m+[m[32m        const titleEl = document.getElementById('circuit-mode-title');[m
+[32m+[m[32m        if (titleEl && modeNames[mode]) titleEl.textContent = modeNames[mode];[m
+[32m+[m
+[32m+[m[32m        const vccEl = document.getElementById('svg-vcc-val');[m
+[32m+[m[32m        if (vccEl) vccEl.textContent = 'VCC = ' + getFieldText('vcc');[m
+[32m+[m
+[32m+[m[32m        const betaEl = document.getElementById('svg-beta-val');[m
+[32m+[m[32m        const betaIn = document.getElementById('beta');[m
+[32m+[m[32m        if (betaEl && betaIn) betaEl.textContent = '(β = ' + betaIn.value + ')';[m
+[32m+[m
+[32m+[m[32m        const upperLabel = document.getElementById('svg-upper-label');[m
+[32m+[m[32m        const upperVal = document.getElementById('svg-upper-val');[m
+[32m+[m[32m        if (upperLabel && upperVal) {[m
+[32m+[m[32m          if (mode === 'divider') {[m
+[32m+[m[32m            upperLabel.textContent = 'R1';[m
+[32m+[m[32m            upperVal.textContent = getFieldText('r1');[m
+[32m+[m[32m          } else {[m
+[32m+[m[32m            upperLabel.textContent = 'RB';[m
+[32m+[m[32m            upperVal.textContent = getFieldText('rb');[m
+[32m+[m[32m          }[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        const r2Val = document.getElementById('svg-r2-val');[m
+[32m+[m[32m        if (r2Val) r2Val.textContent = getFieldText('r2');[m
+[32m+[m
+[32m+[m[32m        const rcVal = document.getElementById('svg-rc-val');[m
+[32m+[m[32m        if (rcVal) rcVal.textContent = getFieldText('rc');[m
+[32m+[m
+[32m+[m[32m        const reVal = document.getElementById('svg-re-val');[m
+[32m+[m[32m        if (reVal) reVal.textContent = getFieldText('re');[m
+[32m+[m
+[32m+[m[32m        const r2Group = document.getElementById('svg-r2-group');[m
+[32m+[m[32m        if (r2Group) r2Group.style.display = (mode === 'divider') ? '' : 'none';[m
+[32m+[m
+[32m+[m[32m        const reGroup = document.getElementById('svg-re-group');[m
+[32m+[m[32m        const gndGroup = document.getElementById('svg-direct-gnd');[m
+[32m+[m[32m        if (reGroup) reGroup.style.display = (mode === 'fixed') ? 'none' : '';[m
+[32m+[m[32m        if (gndGroup) gndGroup.style.display = (mode === 'fixed') ? '' : 'none';[m
+[32m+[m[32m      }[m
+[32m+[m
+[32m+[m[32m      if (modeSelect) {[m
+[32m+[m[32m        modeSelect.addEventListener('change', updateModeUI);[m
+[32m+[m[32m        document.getElementById('bias-form').addEventListener('input', updateModeUI);[m
+[32m+[m[32m        document.getElementById('bias-form').addEventListener('change', updateModeUI);[m
+[32m+[m[32m        updateModeUI();[m
+[32m+[m[32m      }[m
+[32m+[m[32m    })();[m
+[32m+[m[32m  </script>[m
+ </body>[m
+[31m-</html>[m
+[32m+[m[32m</html>[m
+\ No newline at end of file[m

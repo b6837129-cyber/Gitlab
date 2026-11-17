@@ -4,11 +4,16 @@ from flask import Flask, render_template, request
 
 from bjt import (
     ACTIVE,
+    BIAS_MODES,
     CUTOFF,
     DEFAULT_UNITS,
-    SATURATION,
-    analyze_bias,
-    validate_and_parse,
+    MODE_LABELS,
+    BiasInputs,
+    BiasResult,
+    calculate_emitter_bias,
+    calculate_fixed_bias,
+    calculate_voltage_divider,
+    validate_and_parse_mode,
 )
 from verification import verify_active
 
@@ -16,12 +21,15 @@ from verification import verify_active
 CALCULATION_ERROR = "These values do not produce a valid result."
 
 DEFAULT_FORM = {
+    "mode": "divider",
     "vcc": "12.0",
     "vcc_unit": "V",
     "r1": "100",
     "r1_unit": "kΩ",
     "r2": "22",
     "r2_unit": "kΩ",
+    "rb": "1",
+    "rb_unit": "MΩ",
     "rc": "2.2",
     "rc_unit": "kΩ",
     "re": "1.0",
@@ -37,19 +45,20 @@ UNIT_OPTIONS = {
     "vbe": ("V", "mV"),
     "r1": ("Ω", "kΩ", "MΩ"),
     "r2": ("Ω", "kΩ", "MΩ"),
+    "rb": ("Ω", "kΩ", "MΩ"),
     "rc": ("Ω", "kΩ", "MΩ"),
     "re": ("Ω", "kΩ", "MΩ"),
     "beta": ("—",),
 }
 
-DISPLAY_SCALES = (
-    ("ib_a", 1e6),
-    ("ic_a", 1e3),
-    ("ie_a", 1e3),
-    ("vb_v", 1.0),
-    ("vc_v", 1.0),
-    ("ve_v", 1.0),
-    ("vce_v", 1.0),
+DISPLAY_KEYS = (
+    "ib_ua",
+    "ic_ma",
+    "ie_ma",
+    "vb_v",
+    "vc_v",
+    "ve_v",
+    "vce_v",
 )
 
 VERIFICATION_FIELDS = (
@@ -68,7 +77,7 @@ def _require_finite(values):
         raise ValueError("calculation produced a non-finite display value")
 
 
-def _comparison_rows(main, verification):
+def _comparison_rows(main_dict, verification):
     specs = (
         ("IB", "ib_a", 1e6, "µA", 4),
         ("IC", "ic_a", 1e3, "mA", 4),
@@ -79,9 +88,9 @@ def _comparison_rows(main, verification):
         ("VCE", "vce_v", 1.0, "V", 4),
     )
     rows = []
-    for label, attr, scale, unit, decimals in specs:
-        main_value = getattr(main, attr) * scale
-        check_value = getattr(verification, attr) * scale
+    for label, key, scale, unit, decimals in specs:
+        main_value = main_dict[key] * scale
+        check_value = getattr(verification, key) * scale
         diff = abs(main_value - check_value)
         _require_finite((main_value, check_value, diff))
         rows.append(
@@ -97,41 +106,42 @@ def _comparison_rows(main, verification):
     return rows
 
 
-def _results_rows(result):
+def _results_rows(result_dict):
     return [
-        {"label": "VB", "value": f"{result.vb_v:.2f}", "unit": "V"},
-        {"label": "VE", "value": f"{result.ve_v:.2f}", "unit": "V"},
-        {"label": "VC", "value": f"{result.vc_v:.2f}", "unit": "V"},
-        {"label": "VCE", "value": f"{result.vce_v:.2f}", "unit": "V"},
-        {"label": "IB", "value": f"{result.ib_a * 1e6:.1f}", "unit": "µA"},
-        {"label": "IC", "value": f"{result.ic_a * 1e3:.2f}", "unit": "mA"},
-        {"label": "IE", "value": f"{result.ie_a * 1e3:.2f}", "unit": "mA"},
+        {"label": "VB", "value": f"{result_dict['vb_v']:.2f}", "unit": "V"},
+        {"label": "VE", "value": f"{result_dict['ve_v']:.2f}", "unit": "V"},
+        {"label": "VC", "value": f"{result_dict['vc_v']:.2f}", "unit": "V"},
+        {"label": "VCE", "value": f"{result_dict['vce_v']:.2f}", "unit": "V"},
+        {"label": "IB", "value": f"{result_dict['ib_ua']:.1f}", "unit": "µA"},
+        {"label": "IC", "value": f"{result_dict['ic_ma']:.2f}", "unit": "mA"},
+        {"label": "IE", "value": f"{result_dict['ie_ma']:.2f}", "unit": "mA"},
     ]
 
 
-def _region_card(result):
-    if result.region == ACTIVE:
+def _region_card(result_dict):
+    region = result_dict["region"]
+    if region == ACTIVE:
         return {
             "kind": "ok",
             "icon": "✓",
             "title": "Active region approximation OK",
             "detail": (
-                f"VCE = {result.vce_v:.3f} V > 0.2 V "
-                "(transistor in active region)"
+                f"VCE = {result_dict['vce_v']:.3f} V > 0.2 V "
+                "(transistor in forward-active region)"
             ),
         }
-    if result.region == CUTOFF:
+    if region == CUTOFF:
         return {
             "kind": "cutoff",
             "icon": "!",
-            "title": "Transistor is in cutoff",
-            "detail": "VBB ≤ VBE, so IB ≈ 0 and the transistor is off.",
+            "title": "Cutoff Warning (Model Not Valid)",
+            "detail": result_dict["warning"] or "IB ≤ 0 A; forward-active model may not be valid.",
         }
     return {
         "kind": "saturation",
         "icon": "!",
-        "title": "Transistor is in saturation",
-        "detail": "VCE ≤ 0.2 V; the linear VCE model is not valid.",
+        "title": "Saturation Warning (Model Not Valid)",
+        "detail": result_dict["warning"] or "VCE ≤ 0.2 V; forward-active model may not be valid.",
     }
 
 
@@ -142,6 +152,9 @@ def create_app() -> Flask:
     def index():
         context = {
             "form": dict(DEFAULT_FORM),
+            "mode_labels": MODE_LABELS,
+            "selected_mode": "divider",
+            "selected_mode_label": MODE_LABELS["divider"],
             "errors": {},
             "result": None,
             "verification": None,
@@ -155,36 +168,92 @@ def create_app() -> Flask:
         if request.method == "GET":
             return render_template("index.html", **context)
 
-        inputs, errors = validate_and_parse(request.form)
-        submitted = request.form.to_dict()
+        submitted = dict(DEFAULT_FORM)
+        submitted.update(request.form.to_dict())
         for field, unit in DEFAULT_UNITS.items():
             submitted.setdefault(f"{field}_unit", unit)
+
+        raw_mode = str(request.form.get("mode", "")).strip()
         context["form"] = submitted
+        context["selected_mode"] = raw_mode if raw_mode in BIAS_MODES else "invalid"
+        context["selected_mode_label"] = MODE_LABELS.get(raw_mode, f"Unknown Mode ({raw_mode or 'empty'})")
+
+        parsed, errors = validate_and_parse_mode(request.form)
         if errors:
             context["errors"] = errors
             return render_template("index.html", **context)
 
+        mode = parsed["mode"]
         try:
-            result = analyze_bias(inputs)
-            _require_finite(
-                getattr(result, attr) * scale for attr, scale in DISPLAY_SCALES
-            )
+            if mode == "divider":
+                result_dict = calculate_voltage_divider(
+                    vcc_v=float(parsed["vcc"]),
+                    r1_ohm=float(parsed["r1"]),
+                    r2_ohm=float(parsed["r2"]),
+                    rc_ohm=float(parsed["rc"]),
+                    re_ohm=float(parsed["re"]),
+                    beta=float(parsed["beta"]),
+                    vbe_v=float(parsed["vbe"]),
+                )
+            elif mode == "fixed":
+                result_dict = calculate_fixed_bias(
+                    vcc_v=float(parsed["vcc"]),
+                    rb_ohm=float(parsed["rb"]),
+                    rc_ohm=float(parsed["rc"]),
+                    beta=float(parsed["beta"]),
+                    vbe_v=float(parsed["vbe"]),
+                )
+            elif mode == "emitter":
+                result_dict = calculate_emitter_bias(
+                    vcc_v=float(parsed["vcc"]),
+                    rb_ohm=float(parsed["rb"]),
+                    rc_ohm=float(parsed["rc"]),
+                    re_ohm=float(parsed["re"]),
+                    beta=float(parsed["beta"]),
+                    vbe_v=float(parsed["vbe"]),
+                )
+            else:
+                context["errors"] = {"mode": "Unknown bias mode selected."}
+                return render_template("index.html", **context)
+
+            _require_finite(result_dict[k] for k in DISPLAY_KEYS)
 
             verification = None
             comparison_rows = None
-            if result.region == ACTIVE:
-                verification = verify_active(inputs, result)
+            if mode == "divider" and result_dict["region"] == ACTIVE:
+                divider_inputs = BiasInputs(
+                    vcc_v=float(parsed["vcc"]),
+                    r1_ohm=float(parsed["r1"]),
+                    r2_ohm=float(parsed["r2"]),
+                    rc_ohm=float(parsed["rc"]),
+                    re_ohm=float(parsed["re"]),
+                    beta=float(parsed["beta"]),
+                    vbe_v=float(parsed["vbe"]),
+                )
+                divider_result = BiasResult(
+                    vbb_v=result_dict["vbb_v"],
+                    rb_ohm=result_dict["rb_ohm"],
+                    ib_a=result_dict["ib_a"],
+                    ic_a=result_dict["ic_a"],
+                    ie_a=result_dict["ie_a"],
+                    vb_v=result_dict["vb_v"],
+                    vc_v=result_dict["vc_v"],
+                    ve_v=result_dict["ve_v"],
+                    vce_v=result_dict["vce_v"],
+                    region=result_dict["region"],
+                )
+                verification = verify_active(divider_inputs, divider_result)
                 _require_finite(
                     getattr(verification, attr) for attr in VERIFICATION_FIELDS
                 )
-                comparison_rows = _comparison_rows(result, verification)
+                comparison_rows = _comparison_rows(result_dict, verification)
         except (ValueError, OverflowError, ZeroDivisionError):
-            context["calculation_error"] = CALCULATION_ERROR
+            context["calculation_error"] = f"[{context['selected_mode_label']}] {CALCULATION_ERROR}"
             return render_template("index.html", **context)
 
-        context["result"] = result
-        context["region_card"] = _region_card(result)
-        context["results_rows"] = _results_rows(result)
+        context["result"] = result_dict
+        context["region_card"] = _region_card(result_dict)
+        context["results_rows"] = _results_rows(result_dict)
         context["verification"] = verification
         context["comparison_rows"] = comparison_rows
 
