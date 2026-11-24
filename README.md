@@ -1,107 +1,40 @@
-# BJT Common-Emitter DC Bias Calculator
+# Lab 04: BJT Amplifier Simulator v1 (Common-Emitter DC Bias & SPICE Analysis)
 
 ## Overview
 
-A Flask web app for the ENG29 2121 lab that computes the DC operating point of
-a common-emitter amplifier with voltage-divider bias. Enter VCC, R1, R2, RC,
-RE, β and VBE, and the app calculates IB, IC, IE, VB, VC, VE and VCE with
-units, validates the input, reports the operating region (active, cutoff or
-saturation), and compares the result against an independent nodal analysis.
+A Flask web app for the **ENG29 2121 (Computer Programming for Electrical Engineers)** lab that computes both the analytical DC operating point and real **ngspice** circuit simulations (`.op`, `.ac`, and `.tran`) of a BJT amplifier.
 
-The page is an English three-column dashboard: an input panel with unit
-dropdowns, a circuit diagram whose labels follow the values you enter, and a
-results panel with a region card. The independent verification table and the
-Week 2 goal sit below the main dashboard.
+- **Analytical DC Bias Solver (`bjt.py` & `verification.py`)**: Supports three bias configurations (**Voltage Divider Bias**, **Fixed Bias**, and **Emitter Bias**), validates inputs with unit conversion, reports the operating region (active, cutoff, or saturation), and cross-checks voltage-divider results against an independent nodal analysis.
+- **Real ngspice Simulation Engine (`spice_engine.py`)**: Executes batch simulations via `ngspice_con.exe` / `ngspice` using a `Q2N2222` BJT model for the Common-Emitter amplifier, providing real DC operating points (`.op`), small-signal Bode magnitude/phase plots (`.ac`), and time-domain input/output waveforms (`.tran`), alongside a netlist and solver log inspector.
+
+The page is an English three-column dashboard: an input panel with unit dropdowns and SPICE mode tabs, a dynamic inline SVG circuit diagram that updates with your component values and bias mode, and a results panel that separates **Analytical** values from **Engine: ngspice** results.
 
 ## Features
 
-- Seven inputs: VCC, R1, R2, RC, RE, β and VBE.
-- Functional unit dropdowns: `V`/`mV` for voltages, `Ω`/`kΩ`/`MΩ` for
-  resistances, and a unitless `—` for β. Values are converted to base units
-  before the calculation.
-- The form opens with the example values from the lab mockup, but every field
-  is editable and any valid set of values recalculates on submit.
-- DC operating point shown with µA, mA and V units.
-- English validation messages for blank, non-numeric, non-finite, zero or
-  negative values, β < 1, and VBE outside 0–1.5 V.
-- A region card that reports active, cutoff or saturation, with its own colour
-  for each.
-- Independent nodal analysis with a comparison table and a PASS/FAIL line.
-- Inline SVG circuit diagram, no JavaScript and no extra runtime dependencies.
-- Automated tests for the calculation, validation and Flask routes.
+- **Three Bias Modes**: Voltage Divider Bias, Fixed Bias, and Emitter Bias (Single Supply), dynamically hiding unused component fields.
+- **Three Real SPICE Analysis Modes (CE Reference)**:
+  - `DC (.op)`: Real SPICE node voltages ($V_B, V_E, V_C, V_{CE}$) and branch currents ($I_B, I_C$).
+  - `AC (.ac)`: Frequency sweep (`10 Hz` to `10 MHz`) with midband gain (V/V and dB), $-3\text{ dB}$ cutoff frequencies ($f_L, f_H$), and an interactive Bode magnitude & phase plot.
+  - `Transient (.tran)`: Time-domain sine-wave simulation showing peak $V_{in}$, peak $V_{out}$, voltage gain, $180^\circ$ phase inversion, and dual-axis waveform plots.
+- **Functional Unit Dropdowns**: `V`/`mV` for voltages, `Ω`/`kΩ`/`MΩ` for resistances, `nF`/`µF`/`mF` for coupling capacitors, `Hz`/`kHz`/`MHz` for frequency, and `—` for $\beta$.
+- **Provenance & Netlist Inspector**: Clearly distinguishes analytical results (`dc_bias.py`) from `ngspice` solver outputs, with an expandable panel to inspect the generated `.cir` netlist and raw `ngspice` log.
+- **Input Validation & Regression Tests**: English validation messages for invalid/non-finite inputs and 43 automated unit and Flask route tests.
 
 ## Install
+
+### 1. Install `ngspice` (Required for SPICE Simulation)
+
+- **Windows**:
+  1. Download the 64-bit Windows `ngspice` archive (e.g., `ngspice-47_64.zip`) from SourceForge.
+  2. Extract it so `ngspice_con.exe` is located at `C:\Spice64\bin\ngspice_con.exe` and add `C:\Spice64\bin` to your System `PATH`.
+  3. Verify in PowerShell: `ngspice_con -v`
+- **macOS**: `brew install ngspice`
+- **Ubuntu / Debian**: `sudo apt-get update && sudo apt-get install -y ngspice`
+
+### 2. Install Python Dependencies
 
 Python 3.12 or newer is required.
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-## Run
-
-```powershell
-.\.venv\Scripts\python.exe app.py
-```
-
-Open `http://127.0.0.1:5000`.
-
-## Test
-
-```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests -t . -v
-```
-
-## Example
-
-The default values follow the lab mockup:
-
-| Quantity | Value |
-| --- | --- |
-| VCC | 12 V |
-| R1 | 100 kΩ |
-| R2 | 22 kΩ |
-| RC | 2.2 kΩ |
-| RE | 1 kΩ |
-| β | 100 |
-| VBE | 0.70 V |
-
-Results from the app's exact model (it accounts for base current, so the
-numbers differ slightly from the approximate values in the mockup):
-
-| Quantity | Value |
-| --- | --- |
-| VB | 1.94 V |
-| VE | 1.24 V |
-| VC | 9.29 V |
-| VCE | 8.05 V |
-| IB | 12.3 µA |
-| IC | 1.23 mA |
-| IE | 1.24 mA |
-
-Operating region: active, and the independent nodal verification passes.
-
-Changing any field recalculates with the new values. For example, 9 V, 47 kΩ,
-10 kΩ, 1 kΩ, 470 Ω, β = 200 and VBE = 0.65 V gives VB 1.50 V, VE 0.85 V,
-VC 7.19 V, VCE 6.34 V, IB 9.0 µA, IC 1.81 mA and IE 1.82 mA.
-
-## File layout
-
-- `app.py` — Flask app factory, route, default form values and view helpers
-- `bjt.py` — unit-aware validation, DC operating point calculation and region
-  classification
-- `verification.py` — independent nodal analysis and result comparison
-- `templates/index.html` — English dashboard template with the inline SVG
-  circuit
-- `static/style.css` — dashboard styling
-- `tests/test_bjt.py` — validation and calculation tests
-- `tests/test_verification.py` — independent verification tests
-- `tests/test_app.py` — Flask route and rendering tests
-- `requirements.txt` — runtime dependencies
-- `docs/superpowers/` — design and implementation plan documents
-
-## Notes
-
-`electrical.py` and `test_electrical.py` are an earlier Ohm's law exercise and
-remain in the repository. The BJT app above is a separate lab project.

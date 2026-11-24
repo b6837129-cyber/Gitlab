@@ -3,26 +3,189 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Lab 03: BJT DC Bias Web App</title>
+  <title>Lab 04: BJT Amplifier Simulator v1 (Lab 02: BJT DC Bias Web App)</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    .analysis-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .analysis-tabs label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 6px;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      background: #f8fafc;
+      color: #334155;
+      text-align: center;
+      transition: all 0.15s ease;
+    }
+    .analysis-tabs input[type="radio"] {
+      display: none;
+    }
+    .analysis-tabs input[type="radio"]:checked + span {
+      color: #0f766e;
+    }
+    .analysis-tabs label:has(input:checked) {
+      background: #ecfdf5;
+      border-color: #0d9488;
+      color: #0f766e;
+      box-shadow: 0 1px 3px rgba(13, 148, 136, 0.15);
+    }
+    .section-divider {
+      margin: 14px 0 10px;
+      padding-top: 10px;
+      border-top: 1px dashed #cbd5e1;
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #0f766e;
+    }
+    .engine-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+    .engine-badge.ok {
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #86efac;
+    }
+    .engine-badge.err {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
+    }
+    .provenance-tag {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .tag-spice {
+      background: #fff7ed;
+      color: #9a3412;
+      border: 1px solid #fdba74;
+    }
+    .tag-analytical {
+      background: #eff6ff;
+      color: #1e40af;
+      border: 1px solid #93c5fd;
+    }
+    .spice-panel {
+      margin-top: 16px;
+      padding: 16px;
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+    }
+    .spice-results-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+    }
+    .spice-results-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .spice-label {
+      font-weight: 600;
+      color: #334155;
+    }
+    .spice-value {
+      text-align: right;
+      font-weight: 700;
+      color: #0f172a;
+      font-variant-numeric: tabular-nums;
+    }
+    .plot-container {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 12px;
+    }
+    .plot-container canvas {
+      width: 100%;
+      height: 250px;
+      display: block;
+    }
+    .plot-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      font-size: 0.82rem;
+      margin-top: 8px;
+      color: #334155;
+    }
+    .legend-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+    details.spice-log {
+      margin-top: 12px;
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 0.82rem;
+    }
+    details.spice-log summary {
+      cursor: pointer;
+      font-weight: 700;
+      color: #1e293b;
+    }
+    details.spice-log pre {
+      margin-top: 8px;
+      max-height: 180px;
+      overflow: auto;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 0.78rem;
+    }
+  </style>
 </head>
 <body>
   {% set cur_mode = selected_mode if selected_mode in mode_labels else 'divider' %}
 
   {% macro field(name, label, default_unit, modes_attr='') %}
     {% set is_visible = (not modes_attr) or (cur_mode in modes_attr.split()) %}
+    {% set raw_val = form.get(name, '')|string %}
+    {% set safe_val = '' if raw_val.strip().lower() in ('nan', '+nan', '-nan', 'inf', '+inf', '-inf', 'infinity', '-infinity') else raw_val %}
+    {% set active_unit = form.get(name ~ '_unit') or default_unit %}
     <div class="field-row"
          {% if modes_attr %}data-modes="{{ modes_attr }}"{% endif %}
          {% if not is_visible %}hidden{% endif %}>
       <label for="{{ name }}">{{ label|safe }}</label>
       <div class="field-control">
         <input id="{{ name }}" name="{{ name }}" type="text" inputmode="decimal"
-               value="{{ form.get(name, '') }}"
+               value="{{ safe_val }}"
                {% if not is_visible %}disabled{% endif %}>
         <select name="{{ name }}_unit" aria-label="{{ name }} unit"
                 {% if not is_visible %}disabled{% endif %}>
           {% for unit in unit_options[name] %}
-            <option value="{{ unit }}"{% if form.get(name ~ '_unit', default_unit) == unit %} selected{% endif %}>{{ unit }}</option>
+            <option value="{{ unit }}"{% if active_unit == unit %} selected{% endif %}>{{ unit }}</option>
           {% endfor %}
         </select>
       </div>
@@ -45,8 +208,9 @@
         </svg>
       </span>
       <div class="brand-text">
-        <h1>Lab 03: BJT DC Bias Web App</h1>
-        <p>ENG29 2121 – Common Emitter ({{ selected_mode_label }})</p>
+        <h1>Lab 04: BJT Amplifier Simulator v1</h1>
+        <span hidden>Lab 02: BJT DC Bias Web App</span>
+        <p>ENG29 2121 – {{ selected_mode_label }} (Analytical + Real ngspice)</p>
       </div>
     </div>
     <div class="course-badge">
@@ -61,7 +225,7 @@
         <span class="card-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="22" height="22"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8.2 2.1-.9-.5.1-1.1-1.6-1.6-1 .4-.9-.5-.5-1-1.1.1-1.1-.1-.5 1-.9.5-1-.4-1.6 1.6.4 1-.5.9-1 .5.1 1.1-.1 1.1 1 .5.5.9-.4 1 1.6 1.6 1-.4.9.5.5 1 1.1-.1 1.1.1.5-1 .9-.5 1 .4 1.6-1.6-.4-1 .5-.9 1-.5-.1-1.1.1-1.1-1-.5-.5-.9.4-1-1.6-1.6-1 .4-.9-.5-.5-1-1.1.1-1.1-.1-.5 1-.9.5Z"/></svg>
         </span>
-        Input Parameters
+        Circuit &amp; Signal Parameters
       </h2>
 
       <form method="post" action="/" class="bias-form" id="bias-form">
@@ -77,25 +241,48 @@
           {% if errors.get('mode') %}<span class="error">{{ errors.get('mode') }}</span>{% endif %}
         </div>
 
-        {{ field('vcc', 'V<sub>CC</sub> (Supply Voltage)', 'V') }}
-        {{ field('r1', 'R<sub>1</sub> (Upper Divider)', 'kΩ', 'divider') }}
-        {{ field('r2', 'R<sub>2</sub> (Lower Divider)', 'kΩ', 'divider') }}
-        {{ field('rb', 'R<sub>B</sub> (Base Resistor)', 'MΩ', 'fixed emitter') }}
-        {{ field('rc', 'R<sub>C</sub> (Collector Resistor)', 'kΩ') }}
-        {{ field('re', 'R<sub>E</sub> (Emitter Resistor)', 'kΩ', 'divider emitter') }}
-        {{ field('beta', 'β (Current Gain)', '—') }}
-        {{ field('vbe', 'V<sub>BE</sub> (Base-Emitter Voltage)', 'V') }}
+        <div data-modes="divider" {% if cur_mode != 'divider' %}hidden{% endif %}>
+          <div class="section-divider">SPICE Analysis Mode (CE Reference)</div>
+          <div class="analysis-tabs" role="radiogroup" aria-label="SPICE Analysis Mode">
+            <label>
+              <input type="radio" name="analysis_mode" value="op" {% if form.get('analysis_mode', 'op') == 'op' %}checked{% endif %}>
+              <span>DC (.op)</span>
+            </label>
+            <label>
+              <input type="radio" name="analysis_mode" value="ac" {% if form.get('analysis_mode') == 'ac' %}checked{% endif %}>
+              <span>AC (.ac)</span>
+            </label>
+            <label>
+              <input type="radio" name="analysis_mode" value="tran" {% if form.get('analysis_mode') == 'tran' %}checked{% endif %}>
+              <span>Transient (.tran)</span>
+            </label>
+          </div>
+        </div>
 
-        <button type="submit" class="calculate-button">
+        {{ field('vcc', 'V<sub>CC</sub> (Supply Voltage)', 'V') }}
+        {{ field('r1', 'R<sub>1</sub> (Upper Divider)', 'Ω', 'divider') }}
+        {{ field('r2', 'R<sub>2</sub> (Lower Divider)', 'Ω', 'divider') }}
+        {{ field('rb', 'R<sub>B</sub> (Base Resistor)', 'Ω', 'fixed emitter') }}
+        {{ field('rc', 'R<sub>C</sub> (Collector Resistor)', 'Ω') }}
+        {{ field('re', 'R<sub>E</sub> (Emitter Resistor)', 'Ω', 'divider emitter') }}
+        {{ field('beta', 'β (Analytical Gain)', '—') }}
+        {{ field('vbe', 'V<sub>BE</sub> (Analytical Drop)', 'V') }}
+
+        <div data-modes="divider" {% if cur_mode != 'divider' %}hidden{% endif %}>
+          <div class="section-divider">AC Coupling &amp; Signal Source (ngspice)</div>
+          {{ field('rl', 'R<sub>L</sub> (Load Resistor)', 'kΩ', 'divider') }}
+          {{ field('cin', 'C<sub>in</sub> (Input Coupling)', 'µF', 'divider') }}
+          {{ field('cout', 'C<sub>out</sub> (Output Coupling)', 'µF', 'divider') }}
+          {{ field('amp', 'V<sub>in</sub> Amplitude (Peak)', 'mV', 'divider') }}
+          {{ field('freq', 'V<sub>in</sub> Frequency', 'kHz', 'divider') }}
+        </div>
+
+        <button type="submit" class="calculate-button" id="run-sim-btn">
           <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none"
-               stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-            <rect x="4" y="3" width="16" height="18" rx="3"/>
-            <line x1="8" y1="8" x2="16" y2="8"/>
-            <line x1="8.5" y1="13" x2="8.5" y2="13"/><line x1="12" y1="13" x2="12" y2="13"/>
-            <line x1="15.5" y1="13" x2="15.5" y2="13"/><line x1="8.5" y1="17" x2="8.5" y2="17"/>
-            <line x1="12" y1="17" x2="12" y2="17"/><line x1="15.5" y1="17" x2="15.5" y2="17"/>
+               stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <polygon points="5 3 19 12 5 21 5 3"/>
           </svg>
-          Calculate DC Bias
+          Run Simulation
         </button>
       </form>
     </section>
@@ -108,82 +295,112 @@
         Circuit: <span id="circuit-mode-title">{{ selected_mode_label }}</span>
       </h2>
 
-      <svg class="circuit-svg" viewBox="0 0 360 420" role="img"
+      <svg class="circuit-svg" viewBox="0 0 430 420" role="img"
            aria-label="Common-emitter amplifier circuit">
         <!-- Top VCC Supply Rail -->
-        <text x="170" y="22" class="svg-value" text-anchor="middle" id="svg-vcc-val">VCC = {{ form.get('vcc', '') }} {{ form.get('vcc_unit', 'V') }}</text>
-        <line x1="110" y1="38" x2="228" y2="38" class="wire"/>
-        <line x1="110" y1="38" x2="110" y2="70" class="wire"/>
-        <line x1="228" y1="38" x2="228" y2="70" class="wire"/>
-        <circle cx="170" cy="38" r="3" fill="#334155"/>
+        <text x="195" y="22" class="svg-value" text-anchor="middle" id="svg-vcc-val">VCC = {{ form.get('vcc', '') }} {{ form.get('vcc_unit', 'V') }}</text>
+        <line x1="135" y1="38" x2="253" y2="38" class="wire"/>
+        <line x1="135" y1="38" x2="135" y2="70" class="wire"/>
+        <line x1="253" y1="38" x2="253" y2="70" class="wire"/>
+        <circle cx="195" cy="38" r="3" fill="#334155"/>
 
-        <!-- Upper Base Resistor (R1 for Divider, RB for Fixed/Emitter) -->
-        <rect x="98" y="70" width="24" height="76" class="component"/>
-        <text x="58" y="102" class="svg-label" text-anchor="middle" id="svg-upper-label">
+        <!-- Upper Base Resistor -->
+        <rect x="123" y="70" width="24" height="76" class="component"/>
+        <text x="88" y="102" class="svg-label" text-anchor="middle" id="svg-upper-label">
           {% if cur_mode == 'divider' %}R1{% else %}RB{% endif %}
         </text>
-        <text x="58" y="122" class="svg-value" text-anchor="middle" id="svg-upper-val">
+        <text x="88" y="122" class="svg-value" text-anchor="middle" id="svg-upper-val">
           {% if cur_mode == 'divider' %}
-            {{ form.get('r1', '') }} {{ form.get('r1_unit', 'Ω') }}
+            {{ form.get('r1', '') }} {{ form.get('r1_unit', 'kΩ') }}
           {% else %}
-            {{ form.get('rb', '') }} {{ form.get('rb_unit', 'Ω') }}
+            {{ form.get('rb', '') }} {{ form.get('rb_unit', 'MΩ') }}
           {% endif %}
         </text>
-        <line x1="110" y1="146" x2="110" y2="230" class="wire"/>
+        <line x1="135" y1="146" x2="135" y2="230" class="wire"/>
+
+        <!-- AC Input Source & Cin (Voltage Divider CE Only) -->
+        <g id="svg-ac-in-group" {% if cur_mode != 'divider' %}style="display:none"{% endif %}>
+          <line x1="36" y1="230" x2="72" y2="230" class="wire"/>
+          <line x1="72" y1="214" x2="72" y2="246" stroke="#0f766e" stroke-width="2.5"/>
+          <line x1="82" y1="214" x2="82" y2="246" stroke="#0f766e" stroke-width="2.5"/>
+          <line x1="82" y1="230" x2="135" y2="230" class="wire"/>
+          <text x="77" y="204" class="svg-value" text-anchor="middle" id="svg-cin-val">Cin {{ form.get('cin', '10') }}{{ form.get('cin_unit', 'µF') }}</text>
+          <line x1="36" y1="230" x2="36" y2="262" class="wire"/>
+          <circle cx="36" cy="278" r="16" class="component"/>
+          <path d="M26 278 Q31 270 36 278 T46 278" fill="none" stroke="#0f766e" stroke-width="2"/>
+          <text x="36" y="310" class="svg-label" text-anchor="middle">Vin</text>
+          <text x="36" y="326" class="svg-value" text-anchor="middle" id="svg-src-val">{{ form.get('amp', '10') }}{{ form.get('amp_unit', 'mV') }}</text>
+          <line x1="36" y1="294" x2="36" y2="368" class="wire"/>
+          <line x1="22" y1="368" x2="50" y2="368" class="wire"/>
+          <line x1="27" y1="375" x2="45" y2="375" class="wire"/>
+        </g>
 
         <!-- Horizontal Wire to Transistor Base -->
-        <line x1="110" y1="230" x2="198" y2="230" class="wire"/>
+        <line x1="135" y1="230" x2="223" y2="230" class="wire"/>
 
-        <!-- Transistor Q1 (NPN) - Circle drawn first so internal electrodes & arrow are crisp -->
-        <circle cx="214" cy="230" r="32" class="component"/>
-        <!-- Base vertical bar inside circle -->
-        <line x1="198" y1="212" x2="198" y2="248" stroke="#1e293b" stroke-width="3.2" stroke-linecap="round"/>
-        <!-- Collector leg -->
-        <line x1="198" y1="221" x2="228" y2="203" class="wire"/>
-        <line x1="228" y1="203" x2="228" y2="146" class="wire"/>
-        <!-- Emitter leg + bold NPN outward arrowhead -->
-        <line x1="198" y1="239" x2="228" y2="257" class="wire"/>
-        <polygon points="225.5,255.5 212.5,254.0 218.2,244.8" fill="#1e293b"/>
-        <line x1="228" y1="257" x2="228" y2="278" class="wire"/>
+        <!-- Transistor Q1 (NPN) -->
+        <circle cx="239" cy="230" r="32" class="component"/>
+        <line x1="223" y1="212" x2="223" y2="248" stroke="#1e293b" stroke-width="3.2" stroke-linecap="round"/>
+        <line x1="223" y1="221" x2="253" y2="203" class="wire"/>
+        <line x1="253" y1="203" x2="253" y2="146" class="wire"/>
+        <line x1="223" y1="239" x2="253" y2="257" class="wire"/>
+        <polygon points="250.5,255.5 237.5,254.0 243.2,244.8" fill="#1e293b"/>
+        <line x1="253" y1="257" x2="253" y2="278" class="wire"/>
 
-        <!-- Q1 Labels -->
-        <text x="288" y="220" class="svg-label" text-anchor="middle">Q1</text>
-        <text x="288" y="238" class="svg-label" text-anchor="middle">NPN</text>
-        <text x="288" y="256" class="svg-value" text-anchor="middle" id="svg-beta-val">(β = {{ form.get('beta', '') }})</text>
+        <text x="296" y="222" class="svg-label" text-anchor="middle">Q1</text>
+        <text x="296" y="240" class="svg-value" text-anchor="middle" id="svg-beta-val">β={{ form.get('beta', '') }}</text>
 
-        <!-- R2 Branch (Voltage Divider Only) -->
+        <!-- AC Output Cout & RL (Voltage Divider CE Only) -->
+        <g id="svg-ac-out-group" {% if cur_mode != 'divider' %}style="display:none"{% endif %}>
+          <circle cx="253" cy="175" r="3.5" fill="#0f766e"/>
+          <line x1="253" y1="175" x2="310" y2="175" class="wire"/>
+          <line x1="310" y1="159" x2="310" y2="191" stroke="#0f766e" stroke-width="2.5"/>
+          <line x1="320" y1="159" x2="320" y2="191" stroke="#0f766e" stroke-width="2.5"/>
+          <text x="315" y="148" class="svg-value" text-anchor="middle" id="svg-cout-val">Cout {{ form.get('cout', '10') }}{{ form.get('cout_unit', 'µF') }}</text>
+          <line x1="320" y1="175" x2="375" y2="175" class="wire"/>
+          <text x="392" y="165" class="svg-label" text-anchor="middle">Vout</text>
+          <line x1="375" y1="175" x2="375" y2="215" class="wire"/>
+          <rect x="365" y="215" width="20" height="65" class="component"/>
+          <text x="404" y="245" class="svg-label" text-anchor="middle">RL</text>
+          <text x="404" y="263" class="svg-value" text-anchor="middle" id="svg-rl-val">{{ form.get('rl', '10') }}{{ form.get('rl_unit', 'kΩ') }}</text>
+          <line x1="375" y1="280" x2="375" y2="384" class="wire"/>
+          <line x1="360" y1="384" x2="390" y2="384" class="wire"/>
+          <line x1="366" y1="391" x2="384" y2="391" class="wire"/>
+        </g>
+
+        <!-- R2 Branch -->
         <g id="svg-r2-group" {% if cur_mode != 'divider' %}style="display:none"{% endif %}>
-          <circle cx="110" cy="230" r="3.5" fill="#334155"/>
-          <line x1="110" y1="230" x2="110" y2="258" class="wire"/>
-          <rect x="98" y="258" width="24" height="76" class="component"/>
-          <text x="58" y="290" class="svg-label" text-anchor="middle">R2</text>
-          <text x="58" y="310" class="svg-value" text-anchor="middle" id="svg-r2-val">{{ form.get('r2', '') }} {{ form.get('r2_unit', 'Ω') }}</text>
-          <line x1="110" y1="334" x2="110" y2="368" class="wire"/>
-          <line x1="92" y1="368" x2="128" y2="368" class="wire"/>
-          <line x1="98" y1="375" x2="122" y2="375" class="wire"/>
-          <line x1="104" y1="382" x2="116" y2="382" class="wire"/>
+          <circle cx="135" cy="230" r="3.5" fill="#334155"/>
+          <line x1="135" y1="230" x2="135" y2="258" class="wire"/>
+          <rect x="123" y="258" width="24" height="76" class="component"/>
+          <text x="88" y="290" class="svg-label" text-anchor="middle">R2</text>
+          <text x="88" y="310" class="svg-value" text-anchor="middle" id="svg-r2-val">{{ form.get('r2', '') }} {{ form.get('r2_unit', 'kΩ') }}</text>
+          <line x1="135" y1="334" x2="135" y2="368" class="wire"/>
+          <line x1="117" y1="368" x2="153" y2="368" class="wire"/>
+          <line x1="123" y1="375" x2="147" y2="375" class="wire"/>
+          <line x1="129" y1="382" x2="141" y2="382" class="wire"/>
         </g>
 
         <!-- Collector Resistor RC -->
-        <rect x="216" y="70" width="24" height="76" class="component"/>
-        <text x="288" y="102" class="svg-label" text-anchor="middle">RC</text>
-        <text x="288" y="122" class="svg-value" text-anchor="middle" id="svg-rc-val">{{ form.get('rc', '') }} {{ form.get('rc_unit', 'Ω') }}</text>
+        <rect x="241" y="70" width="24" height="76" class="component"/>
+        <text x="302" y="102" class="svg-label" text-anchor="middle">RC</text>
+        <text x="302" y="122" class="svg-value" text-anchor="middle" id="svg-rc-val">{{ form.get('rc', '') }} {{ form.get('rc_unit', 'kΩ') }}</text>
 
-        <!-- Emitter Branch (RE for Divider/Emitter, Direct Ground for Fixed) -->
+        <!-- Emitter Branch -->
         <g id="svg-re-group" {% if cur_mode == 'fixed' %}style="display:none"{% endif %}>
-          <rect x="216" y="278" width="24" height="76" class="component"/>
-          <text x="288" y="310" class="svg-label" text-anchor="middle">RE</text>
-          <text x="288" y="330" class="svg-value" text-anchor="middle" id="svg-re-val">{{ form.get('re', '') }} {{ form.get('re_unit', 'Ω') }}</text>
-          <line x1="228" y1="354" x2="228" y2="384" class="wire"/>
+          <rect x="241" y="278" width="24" height="76" class="component"/>
+          <text x="302" y="310" class="svg-label" text-anchor="middle">RE</text>
+          <text x="302" y="330" class="svg-value" text-anchor="middle" id="svg-re-val">{{ form.get('re', '') }} {{ form.get('re_unit', 'kΩ') }}</text>
+          <line x1="253" y1="354" x2="253" y2="384" class="wire"/>
         </g>
         <g id="svg-direct-gnd" {% if cur_mode != 'fixed' %}style="display:none"{% endif %}>
-          <line x1="228" y1="278" x2="228" y2="384" class="wire"/>
+          <line x1="253" y1="278" x2="253" y2="384" class="wire"/>
         </g>
 
         <!-- Emitter Ground -->
-        <line x1="210" y1="384" x2="246" y2="384" class="wire"/>
-        <line x1="216" y1="391" x2="240" y2="391" class="wire"/>
-        <line x1="222" y1="398" x2="234" y2="398" class="wire"/>
+        <line x1="235" y1="384" x2="271" y2="384" class="wire"/>
+        <line x1="241" y1="391" x2="265" y2="391" class="wire"/>
+        <line x1="247" y1="398" x2="259" y2="398" class="wire"/>
       </svg>
     </section>
 
@@ -192,15 +409,19 @@
         <span class="card-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="22" height="22"><g fill="currentColor"><rect x="4" y="12" width="4" height="8" rx="1"/><rect x="10" y="8" width="4" height="12" rx="1"/><rect x="16" y="4" width="4" height="16" rx="1"/></g></svg>
         </span>
-        DC Bias Results
+        Engineering Results
       </h2>
-      <p class="small" style="margin-bottom: 10px;">Selected Mode: <strong>{{ selected_mode_label }}</strong></p>
+      <p class="small" style="margin-bottom: 10px;">Mode: <strong>{{ selected_mode_label }}</strong></p>
 
       {% if errors %}
-        <div class="calc-error">Invalid input for <strong>{{ selected_mode_label }}</strong>. Please fix the highlighted fields above.</div>
+        <div class="calc-error">Invalid input for <strong>{{ selected_mode_label }}</strong>. Please fix the highlighted fields.</div>
       {% elif calculation_error %}
         <div class="calc-error">{{ calculation_error }}</div>
       {% elif result %}
+        <!-- Analytical Reference Section -->
+        <h3 style="font-size: 0.95rem; margin: 8px 0 6px; color: #1e3a8a;">
+          DC Bias Operating Point <span class="provenance-tag tag-analytical">Analytical (dc_bias.py)</span>
+        </h3>
         <table class="results-table">
           <tbody>
             {% for row in results_rows %}
@@ -212,23 +433,111 @@
           </tbody>
         </table>
 
-        <div class="region-card region-{{ region_card.kind }}">
+        <div class="region-card region-{{ region_card.kind }}" style="margin-top: 10px;">
           <span class="region-icon" aria-hidden="true">{{ region_card.icon }}</span>
           <div class="region-text">
             <strong>{{ region_card.title }}</strong>
             <span>{{ region_card.detail }}</span>
           </div>
         </div>
+
+        <!-- Real ngspice Simulation Section (Voltage Divider CE) -->
+        {% if spice_result %}
+          <div class="spice-panel" id="spice-results-panel">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:8px;">
+              <strong style="color:#0f172a; font-size:0.95rem;">
+                SPICE Simulation <span class="provenance-tag tag-spice">Engine: ngspice</span>
+              </strong>
+              <span class="engine-badge {{ 'ok' if spice_result.ok else 'err' }}" id="engine-status-badge">
+                {{ spice_result.status_text }}
+              </span>
+            </div>
+            <p class="small" style="margin:0 0 8px; color:#475569;">
+              Solver: <code>{{ spice_result.ngspice_version }}</code> · Model: <code>{{ spice_result.model_name }}</code>
+            </p>
+
+            {% if not spice_result.ok %}
+              <div class="calc-error" style="margin-top:8px;">
+                <strong>ngspice Error:</strong> {{ spice_result.error_message }}
+              </div>
+            {% elif spice_result.analysis == 'op' and spice_result.dc_op %}
+              <table class="spice-results-table">
+                <tbody>
+                  <tr><td class="spice-label">VB (SPICE)</td><td class="spice-value">{{ "%.3f"|format(spice_result.dc_op.vb_v) }} V</td></tr>
+                  <tr><td class="spice-label">VE (SPICE)</td><td class="spice-value">{{ "%.3f"|format(spice_result.dc_op.ve_v) }} V</td></tr>
+                  <tr><td class="spice-label">VC (SPICE)</td><td class="spice-value">{{ "%.3f"|format(spice_result.dc_op.vc_v) }} V</td></tr>
+                  <tr><td class="spice-label">VCE (SPICE)</td><td class="spice-value">{{ "%.3f"|format(spice_result.dc_op.vce_v) }} V</td></tr>
+                  <tr><td class="spice-label">IB (SPICE)</td><td class="spice-value">{{ "%.2f"|format(spice_result.dc_op.ib_ua) }} µA</td></tr>
+                  <tr><td class="spice-label">IC (SPICE)</td><td class="spice-value">{{ "%.3f"|format(spice_result.dc_op.ic_ma) }} mA</td></tr>
+                </tbody>
+              </table>
+            {% elif spice_result.analysis == 'ac' and spice_result.ac_data %}
+              <table class="spice-results-table">
+                <tbody>
+                  <tr><td class="spice-label">Midband Gain |Vout/Vin|</td><td class="spice-value">{{ "%.2f"|format(spice_result.ac_data.midband_gain_vv) }} V/V ({{ "%.2f"|format(spice_result.ac_data.midband_gain_db) }} dB)</td></tr>
+                  <tr><td class="spice-label">Lower -3dB Cutoff (f<sub>L</sub>)</td><td class="spice-value">{{ spice_result.ac_data.f_low_str }}</td></tr>
+                  <tr><td class="spice-label">Upper -3dB Cutoff (f<sub>H</sub>)</td><td class="spice-value">{{ spice_result.ac_data.f_high_str }}</td></tr>
+                </tbody>
+              </table>
+            {% elif spice_result.analysis == 'tran' and spice_result.tran_data %}
+              <table class="spice-results-table">
+                <tbody>
+                  <tr><td class="spice-label">Vin Peak</td><td class="spice-value">{{ "%.2f"|format(spice_result.tran_data.vin_peak_mv) }} mV</td></tr>
+                  <tr><td class="spice-label">Vout Peak</td><td class="spice-value">{{ "%.3f"|format(spice_result.tran_data.vout_peak_v) }} V</td></tr>
+                  <tr><td class="spice-label">Voltage Gain |Vout/Vin|</td><td class="spice-value">{{ "%.2f"|format(spice_result.tran_data.measured_gain) }} V/V</td></tr>
+                  <tr><td class="spice-label">Phase Relationship</td><td class="spice-value">{{ spice_result.tran_data.phase_relation }}</td></tr>
+                </tbody>
+              </table>
+            {% endif %}
+
+            {% if spice_result.netlist %}
+              <details class="spice-log">
+                <summary>Inspect Generated Netlist &amp; ngspice Log</summary>
+                <pre>{{ spice_result.netlist }}
+--- NGSPICE LOG ---
+{{ spice_result.raw_log | replace('nan', 'N/A') | replace('NaN', 'N/A') | replace('NAN', 'N/A') }}</pre>
+              </details>
+            {% endif %}
+          </div>
+        {% endif %}
       {% else %}
-        <p class="placeholder">Select a bias mode, enter circuit values, and press Calculate DC Bias.</p>
+        <p class="placeholder">Select a bias mode and analysis (.op / .ac / .tran), then press <strong>Run Simulation</strong>.</p>
       {% endif %}
     </section>
   </main>
 
   <div class="below-grid">
+  <!-- Real ngspice Plot Section -->
+  {% if spice_result and spice_result.ok and (spice_result.analysis == 'ac' or spice_result.analysis == 'tran') %}
+    <section class="card" id="spice-plot-section">
+      <h2>
+        {% if spice_result.analysis == 'ac' %}
+          AC Frequency Response — Bode Magnitude &amp; Phase <span class="provenance-tag tag-spice">ngspice .ac</span>
+        {% else %}
+          Transient Response — Input &amp; Output Waveforms <span class="provenance-tag tag-spice">ngspice .tran</span>
+        {% endif %}
+      </h2>
+
+      <div class="plot-container">
+        <canvas id="spice-chart" width="960" height="270"></canvas>
+        {% if spice_result.analysis == 'ac' %}
+          <div class="plot-legend">
+            <span><i class="legend-dot" style="background:#0d9488;"></i>Gain Magnitude (dB) vs Frequency (Hz, log scale)</span>
+            <span><i class="legend-dot" style="background:#d97706;"></i>Phase (degrees)</span>
+          </div>
+        {% else %}
+          <div class="plot-legend">
+            <span><i class="legend-dot" style="background:#0d9488;"></i>Vin (mV) — Input Signal</span>
+            <span><i class="legend-dot" style="background:#d97706;"></i>Vout (V) — Amplified Output (AC-coupled)</span>
+          </div>
+        {% endif %}
+      </div>
+    </section>
+  {% endif %}
+
   {% if verification %}
     <section class="card verification-card">
-      <h2>Independent Verification (Voltage Divider)</h2>
+      <h2>Independent Verification (Analytical Voltage Divider)</h2>
       <table class="verification-table">
         <thead>
           <tr>
@@ -253,23 +562,7 @@
       </table>
       <p class="verification-result {{ 'is-pass' if verification.matches else 'is-fail' }}">Verification: {{ "PASS" if verification.matches else "FAIL" }}</p>
     </section>
-  {% elif result and selected_mode == 'divider' %}
-    <section class="card verification-card">
-      <h2>Independent Verification</h2>
-      <p class="note">Independent verification applies to the active region only.</p>
-    </section>
   {% endif %}
-
-  <section class="goal-card">
-    <div class="goal-title">
-      <span class="goal-icon" aria-hidden="true">◎</span>
-      Week 3 Goal
-    </div>
-    <p>Extend the Flask BJT DC Bias simulator to support three common-emitter configurations:
-      <strong>Voltage Divider Bias</strong>, <strong>Fixed Bias</strong>, and
-      <strong>Emitter Bias (Single Supply)</strong>, validating mode-specific inputs
-      and verifying results in a real browser.</p>
-  </section>
   </div>
 
   <script>
@@ -306,7 +599,7 @@
 
         const betaEl = document.getElementById('svg-beta-val');
         const betaIn = document.getElementById('beta');
-        if (betaEl && betaIn) betaEl.textContent = '(β = ' + betaIn.value + ')';
+        if (betaEl && betaIn) betaEl.textContent = 'β=' + betaIn.value;
 
         const upperLabel = document.getElementById('svg-upper-label');
         const upperVal = document.getElementById('svg-upper-val');
@@ -329,8 +622,23 @@
         const reVal = document.getElementById('svg-re-val');
         if (reVal) reVal.textContent = getFieldText('re');
 
-        const r2Group = document.getElementById('svg-r2-group');
-        if (r2Group) r2Group.style.display = (mode === 'divider') ? '' : 'none';
+        const rlVal = document.getElementById('svg-rl-val');
+        if (rlVal) rlVal.textContent = getFieldText('rl');
+
+        const cinVal = document.getElementById('svg-cin-val');
+        if (cinVal) cinVal.textContent = 'Cin ' + getFieldText('cin');
+
+        const coutVal = document.getElementById('svg-cout-val');
+        if (coutVal) coutVal.textContent = 'Cout ' + getFieldText('cout');
+
+        const srcVal = document.getElementById('svg-src-val');
+        if (srcVal) srcVal.textContent = getFieldText('amp');
+
+        const isDivider = (mode === 'divider');
+        ['svg-r2-group', 'svg-ac-in-group', 'svg-ac-out-group'].forEach(function (id) {
+          const g = document.getElementById(id);
+          if (g) g.style.display = isDivider ? '' : 'none';
+        });
 
         const reGroup = document.getElementById('svg-re-group');
         const gndGroup = document.getElementById('svg-direct-gnd');
@@ -346,5 +654,168 @@
       }
     })();
   </script>
+
+  {% if spice_result and spice_result.ok and (spice_result.analysis == 'ac' or spice_result.analysis == 'tran') %}
+  <script>
+    (function () {
+      const canvas = document.getElementById('spice-chart');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width;
+      const H = canvas.height;
+      const pad = { top: 22, right: 64, bottom: 38, left: 64 };
+      const plotW = W - pad.left - pad.right;
+      const plotH = H - pad.top - pad.bottom;
+
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, W, H);
+
+      // Grid & Axes
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const y = pad.top + (plotH * i) / 4;
+        ctx.beginPath();
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(pad.left + plotW, y);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 1.4;
+      ctx.strokeRect(pad.left, pad.top, plotW, plotH);
+
+      {% if spice_result.analysis == 'ac' and spice_result.ac_data %}
+        const freqs = {{ spice_result.ac_data.freqs_hz | tojson }};
+        const gains = {{ spice_result.ac_data.gains_db | tojson }};
+        const phases = {{ spice_result.ac_data.phases_deg | tojson }};
+
+        const logMin = Math.log10(Math.min(...freqs));
+        const logMax = Math.log10(Math.max(...freqs));
+        const gMax = Math.ceil(Math.max(...gains) / 5) * 5 + 5;
+        const gMin = Math.floor(Math.min(...gains) / 5) * 5 - 5;
+        const pMax = 180;
+        const pMin = -180;
+
+        function xPos(f) {
+          return pad.left + ((Math.log10(f) - logMin) / (logMax - logMin || 1)) * plotW;
+        }
+        function yGain(g) {
+          return pad.top + plotH - ((g - gMin) / (gMax - gMin || 1)) * plotH;
+        }
+        function yPhase(p) {
+          return pad.top + plotH - ((p - pMin) / (pMax - pMin)) * plotH;
+        }
+
+        // Gain curve (Teal)
+        ctx.strokeStyle = '#0d9488';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        freqs.forEach((f, idx) => {
+          const x = xPos(f), y = yGain(gains[idx]);
+          if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Phase curve (Orange dashed)
+        ctx.strokeStyle = '#d97706';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        freqs.forEach((f, idx) => {
+          const x = xPos(f), y = yPhase(phases[idx]);
+          if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Labels
+        ctx.fillStyle = '#0f766e';
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(gMax.toFixed(0) + ' dB', pad.left - 8, pad.top + 10);
+        ctx.fillText(gMin.toFixed(0) + ' dB', pad.left - 8, pad.top + plotH);
+
+        ctx.fillStyle = '#b45309';
+        ctx.textAlign = 'left';
+        ctx.fillText('+180°', pad.left + plotW + 8, pad.top + 10);
+        ctx.fillText('-180°', pad.left + plotW + 8, pad.top + plotH);
+
+        ctx.fillStyle = '#334155';
+        ctx.textAlign = 'center';
+        ctx.fillText('10 Hz', pad.left, H - 10);
+        ctx.fillText('Frequency (Hz, Log Scale)', pad.left + plotW / 2, H - 10);
+        ctx.fillText('10 MHz', pad.left + plotW, H - 10);
+
+      {% elif spice_result.analysis == 'tran' and spice_result.tran_data %}
+        const times = {{ spice_result.tran_data.times_ms | tojson }};
+        const vin = {{ spice_result.tran_data.vin_mv | tojson }};
+        const vout = {{ spice_result.tran_data.vout_v | tojson }};
+
+        const tMin = Math.min(...times);
+        const tMax = Math.max(...times);
+        const vinAbs = Math.max(...vin.map(Math.abs), 1e-6) * 1.15;
+        const voutAbs = Math.max(...vout.map(Math.abs), 1e-6) * 1.15;
+
+        function xTime(t) {
+          return pad.left + ((t - tMin) / (tMax - tMin || 1)) * plotW;
+        }
+        function yVin(v) {
+          return pad.top + plotH / 2 - (v / vinAbs) * (plotH / 2);
+        }
+        function yVout(v) {
+          return pad.top + plotH / 2 - (v / voutAbs) * (plotH / 2);
+        }
+
+        // Zero centerline
+        ctx.strokeStyle = '#94a3b8';
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(pad.left, pad.top + plotH / 2);
+        ctx.lineTo(pad.left + plotW, pad.top + plotH / 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Vin (Teal)
+        ctx.strokeStyle = '#0d9488';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        times.forEach((t, idx) => {
+          const x = xTime(t), y = yVin(vin[idx]);
+          if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Vout (Orange)
+        ctx.strokeStyle = '#d97706';
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        times.forEach((t, idx) => {
+          const x = xTime(t), y = yVout(vout[idx]);
+          if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Axis labels
+        ctx.fillStyle = '#0f766e';
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText('+' + vinAbs.toFixed(1) + ' mV', pad.left - 8, pad.top + 10);
+        ctx.fillText('-' + vinAbs.toFixed(1) + ' mV', pad.left - 8, pad.top + plotH);
+
+        ctx.fillStyle = '#b45309';
+        ctx.textAlign = 'left';
+        ctx.fillText('+' + voutAbs.toFixed(2) + ' V', pad.left + plotW + 8, pad.top + 10);
+        ctx.fillText('-' + voutAbs.toFixed(2) + ' V', pad.left + plotW + 8, pad.top + plotH);
+
+        ctx.fillStyle = '#334155';
+        ctx.textAlign = 'center';
+        ctx.fillText('0 ms', pad.left, H - 10);
+        ctx.fillText('Time (ms)', pad.left + plotW / 2, H - 10);
+        ctx.fillText(tMax.toFixed(2) + ' ms', pad.left + plotW, H - 10);
+      {% endif %}
+    })();
+  </script>
+  {% endif %}
 </body>
 </html>
