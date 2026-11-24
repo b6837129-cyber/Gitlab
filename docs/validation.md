@@ -55,8 +55,7 @@
 **แนวทางตรวจสอบ:**
 1. **ตรวจฝั่งหน้าเว็บ (`templates/index.html`):** ตรวจสอบใน Browser DevTools (Network/Elements) ว่าช่อง `<input id="re" name="re">` ไม่ได้ติดสถานะ `disabled` และค่าที่กรอกถูกส่งไปใน Payload ของคำขอ `POST` จริง
 2. **ตรวจจุดรับข้อมูลและแปลงหน่วย (`app.py` และ `bjt.py`):** ตรวจสอบว่า `request.form.get("re")` และ `request.form.get("re_unit")` รับค่าใหม่เข้ามาถูกต้อง และฟังก์ชัน `validate_and_parse_mode()` แปลงหน่วยเป็นโอห์ม (`parsed["re"]`) ได้ตรงตามที่กรอก
-3. **ตรวจการส่งพารามิเตอร์เข้าฟังก์ชันคำนวณ (`app.py`):** ตรวจสอบในบล็อก `elif mode == "emitter":` และ `if mode == "divider":` ว่าได้ส่งอาร์กิวเมนต์ `re_ohm=float(parsed["re"])` เข้าไปในฟังก์ชัน `calculate_emitter_bias()` หรือ `calculate_voltage_divider()` จริง ไม่ได้เผลอส่งค่าคงที่หรือส่ง `re_ohm=0.0` ของ Fixed Bias ไปแทน
-```markdown
+3. **ตรวจการส่งพารามิเตอร์เข้าฟังก์ชันคำนวณ (`app.py`):** ตรวจสอบในบล็อก `elif mode == "emitter":` และ `if mode == "divider":` ว่าได้ส่งอาร์กิวเมนต์ `re_ohm=float(parsed["re"])` เข้าไปในฟังก์ชัน `calculate_emitter_bias()` หรือ `calculate_voltage_divider()` จริง ไม่ได้เผลอส่งค่าคงที่หรือส่ง `re_ohm=0.0` ของ Fixed Bias ไปแทนmarkdown
 # Lab 04 Validation & Acceptance Report (B1–B8)
 
 รายงานการตรวจสอบความถูกต้องของเว็บแอปพลิเคชัน **Lab 04: BJT Amplifier Simulator v1** บนเบราว์เซอร์จริง (`http://127.0.0.1:5000`) ร่วมกับเครื่องมือจำลองวงจร **ngspice-47** (โมเดล `Q2N2222_LAB4`)
