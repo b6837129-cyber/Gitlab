@@ -129,6 +129,13 @@ class TestApp(unittest.TestCase):
         self.assertIn("12298.6", text)
         self.assertIn("1229.86", text)
 
+    def test_hidden_rb_field_keeps_default_unit(self):
+        data = dict(VALID, mode="divider")
+        data.pop("rb", None)
+        data.pop("rb_unit", None)
+        text = self.client.post("/", data=data).get_data(as_text=True)
+        self.assertIn('<option value="MΩ" selected>MΩ</option>', text)
+
     def test_invalid_unit_shows_error(self):
         data = dict(VALID)
         data["beta_unit"] = "kΩ"

@@ -31,3 +31,28 @@ python -m venv .venv
 # source .venv/bin/activate
 
 pip install -r requirements.txt
+```
+
+## Run the App
+
+From the project directory, with the virtual environment active:
+
+```powershell
+python app.py
+```
+
+Open `http://127.0.0.1:5000` in a browser. Keep the terminal running while using the app. SPICE analyses require ngspice to be available on `PATH` or in `C:\Spice64\bin`.
+
+## Run the Tests
+
+```powershell
+python -m pytest tests
+```
+
+The test suite checks the Flask routes, the three DC bias calculations, and independent verification. Browser screenshots and B1–B8 results belong in `docs/validation.md` or the submission evidence folder.
+
+## Reproducibility Notes
+
+- The AC and transient SPICE analyses apply to the voltage-divider common-emitter reference circuit. Fixed Bias and Emitter Bias are DC-only.
+- AC analysis is small-signal; it does not model clipping. The current frequency sweep is 0.1 Hz to 10 MHz.
+- Do not commit `.venv/`, `.env`, API keys, tokens, or large temporary run files.

@@ -242,7 +242,11 @@ def create_app() -> Flask:
         submitted.update(request.form.to_dict())
         for field, base_unit in DEFAULT_UNITS.items():
             if f"{field}_unit" not in request.form:
-                submitted[f"{field}_unit"] = base_unit
+                submitted[f"{field}_unit"] = (
+                    base_unit
+                    if field in request.form
+                    else DEFAULT_FORM.get(f"{field}_unit", base_unit)
+                )
 
         has_explicit_mode = "mode" in request.form
         raw_mode = str(request.form["mode"]).strip() if has_explicit_mode else "divider"

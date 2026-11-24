@@ -689,9 +689,10 @@
         const freqs = {{ spice_result.ac_data.freqs_hz | tojson }};
         const gains = {{ spice_result.ac_data.gains_db | tojson }};
         const phases = {{ spice_result.ac_data.phases_deg | tojson }};
-
-        const logMin = Math.log10(Math.min(...freqs));
-        const logMax = Math.log10(Math.max(...freqs));
+        const minFreq = Math.min(...freqs);
+        const maxFreq = Math.max(...freqs);
+        const logMin = Math.log10(minFreq);
+        const logMax = Math.log10(maxFreq);
         const gMax = Math.ceil(Math.max(...gains) / 5) * 5 + 5;
         const gMin = Math.floor(Math.min(...gains) / 5) * 5 - 5;
         const pMax = 180;
@@ -705,6 +706,11 @@
         }
         function yPhase(p) {
           return pad.top + plotH - ((p - pMin) / (pMax - pMin)) * plotH;
+        }
+        function formatFrequency(freq) {
+          if (freq >= 1e6) return `${freq / 1e6} MHz`;
+          if (freq >= 1e3) return `${freq / 1e3} kHz`;
+          return `${freq} Hz`;
         }
 
         // Gain curve (Teal)
@@ -743,9 +749,9 @@
 
         ctx.fillStyle = '#334155';
         ctx.textAlign = 'center';
-        ctx.fillText('10 Hz', pad.left, H - 10);
+        ctx.fillText(formatFrequency(minFreq), pad.left, H - 10);
         ctx.fillText('Frequency (Hz, Log Scale)', pad.left + plotW / 2, H - 10);
-        ctx.fillText('10 MHz', pad.left + plotW, H - 10);
+        ctx.fillText(formatFrequency(maxFreq), pad.left + plotW, H - 10);
 
       {% elif spice_result.analysis == 'tran' and spice_result.tran_data %}
         const times = {{ spice_result.tran_data.times_ms | tojson }};

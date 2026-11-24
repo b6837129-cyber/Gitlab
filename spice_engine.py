@@ -120,7 +120,7 @@ print v(vb) v(ve) v(vc) v(vc,ve) i(vcc_sense) i(vb_sense)
 quit
 .endc"""
     elif analysis == "ac":
-        directive_block = """.ac dec 25 10 10Meg
+        directive_block = """.ac dec 25 0.1 10Meg
 .control
 run
 set wr_vecnames
