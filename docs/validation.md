@@ -56,3 +56,42 @@
 1. **ตรวจฝั่งหน้าเว็บ (`templates/index.html`):** ตรวจสอบใน Browser DevTools (Network/Elements) ว่าช่อง `<input id="re" name="re">` ไม่ได้ติดสถานะ `disabled` และค่าที่กรอกถูกส่งไปใน Payload ของคำขอ `POST` จริง
 2. **ตรวจจุดรับข้อมูลและแปลงหน่วย (`app.py` และ `bjt.py`):** ตรวจสอบว่า `request.form.get("re")` และ `request.form.get("re_unit")` รับค่าใหม่เข้ามาถูกต้อง และฟังก์ชัน `validate_and_parse_mode()` แปลงหน่วยเป็นโอห์ม (`parsed["re"]`) ได้ตรงตามที่กรอก
 3. **ตรวจการส่งพารามิเตอร์เข้าฟังก์ชันคำนวณ (`app.py`):** ตรวจสอบในบล็อก `elif mode == "emitter":` และ `if mode == "divider":` ว่าได้ส่งอาร์กิวเมนต์ `re_ohm=float(parsed["re"])` เข้าไปในฟังก์ชัน `calculate_emitter_bias()` หรือ `calculate_voltage_divider()` จริง ไม่ได้เผลอส่งค่าคงที่หรือส่ง `re_ohm=0.0` ของ Fixed Bias ไปแทน
+```markdown
+# Lab 04 Validation & Acceptance Report (B1–B8)
+
+รายงานการตรวจสอบความถูกต้องของเว็บแอปพลิเคชัน **Lab 04: BJT Amplifier Simulator v1** บนเบราว์เซอร์จริง (`http://127.0.0.1:5000`) ร่วมกับเครื่องมือจำลองวงจร **ngspice-47** (โมเดล `Q2N2222_LAB4`)
+
+---
+
+## 1. ตารางผลการตรวจสอบ Browser Acceptance (B1–B8)
+
+| รหัส | รายการตรวจสอบ (Test Case) | วิธีการตรวจสอบ (Procedure) | ผลที่เห็นจริง (Actual Result) | สถานะ |
+| :--- | :--- | :--- | :--- | :---: |
+| **B1** | **หน้าเริ่มต้นและการแสดงผลพื้นฐาน** | เปิด `http://127.0.0.1:5000` ด้วยวิธี `GET` | หน้าเว็บโหลดครบถ้วน แสดงฟอร์มค่าเริ่มต้น ($V_{CC}=12\text{ V}, R_1=100\text{ k}\Omega, R_2=22\text{ k}\Omega, R_C=2.2\text{ k}\Omega, R_E=1\text{ k}\Omega$) และรูปวงจร SVG ถูกต้อง | **PASS** |
+| **B2** | **ความต่อเนื่องจาก Lab 3 (DC Bias 3 แบบ + Regression)** | รัน `python -m pytest tests` และทดลองคำนวณโหมด `Voltage Divider`, `Fixed Bias`, `Emitter Bias` | ผ่านชุดทดสอบอัตโนมัติครบ **43 passed**; โหมด Fixed และ Emitter ซ่อนช่องอุปกรณ์ AC ที่ไม่เกี่ยวข้อง และคำนวณจุดทำงาน DC ได้ถูกต้อง | **PASS** |
+| **B3** | **การจำลอง SPICE โหมด DC (`.op`)** | เลือก `Voltage Divider Bias` + `DC (.op)` ค่าเริ่มต้น แล้วกด **Run Simulation** | สถานะขึ้น `Success (.op)` แสดงค่าจริงจาก `ngspice-47`: $V_B = 2.016\text{ V}$, $V_E = 1.364\text{ V}$, $V_C = 9.017\text{ V}$, $V_{CE} = 7.653\text{ V}$ สอดคล้องกับค่า Analytical ($V_B = 1.94\text{ V}, V_{CE} = 8.05\text{ V}$) | **PASS** |
+| **B4** | **การจำลอง SPICE โหมด AC (`.ac`) และ Bode Plot** | เลือกโหมด `AC (.ac)` ($R_L = 10\text{ k}\Omega, C_{in} = 10\text{ }\mu\text{F}, C_{out} = 10\text{ }\mu\text{F}$) แล้วกด **Run Simulation** | สถานะขึ้น `Success (.ac)` แสดงอัตราขยาย Midband Gain (V/V และ dB), ความถี่ตัด $f_L, f_H$ และวาดกราฟ Bode Magnitude (dB) กับ Phase (deg) บนแกนความถี่ Log Scale ได้จริง | **PASS** |
+| **B5** | **การจำลอง SPICE โหมด Transient (`.tran`)** | เลือกโหมด `Transient (.tran)` ($V_{in} = 10\text{ mV}, f = 1\text{ kHz}$) แล้วกด **Run Simulation** | สถานะขึ้น `Success (.tran)` แสดงค่า $V_{in}\text{ Peak}, V_{out}\text{ Peak}$, อัตราขยาย และวาดกราฟคลื่น $V_{in}$ เทียบกับ $V_{out}$ ที่กลับเฟส $180^\circ$ ในโดเมนเวลา | **PASS** |
+| **B6** | **การตอบสนองเมื่อเปลี่ยนพารามิเตอร์แหล่งจ่าย/ตัวเก็บประจุ** | ทดลองเปลี่ยน Amplitude ใน `.tran` (เช่น $10\text{ mV} \to 20\text{ mV}$) และเปลี่ยน $C_{in}$ ใน `.ac` | ใน `.tran` ค่า $V_{out}\text{ Peak}$ เพิ่มขึ้นตามสัดส่วนอินพุต; ใน `.ac` ความถี่ตัดต่ำ $f_L$ ขยับเปลี่ยนตามค่า $C_{in}$ และตรวจสอบใน Netlist/Log พบค่าอัปเดตตรงตามที่กรอก | **PASS** |
+| **B7** | **การแยกแหล่งที่มา (Provenance) และ Netlist Inspector** | ตรวจสอบป้ายกำกับผลลัพธ์และคลี่หัวข้อ `Inspect Generated Netlist & ngspice Log` | แยกตาราง `Analytical (dc_bias.py)` ออกจากกล่อง `SPICE Simulation (Engine: ngspice)` ชัดเจน และสามารถเปิดดูโค้ด `.cir` กับ Log ของ `ngspice` ได้จริง | **PASS** |
+| **B8** | **การจัดการข้อผิดพลาด (Input Validation & Error Handling)** | กรอกค่าไม่ถูกต้อง (เช่น $V_{CC}=0$, ค่าติดลบ, หรือตัวอักษร) แล้วกดรัน | แสดงข้อความแจ้งเตือนภาษาอังกฤษที่ชัดเจน ไม่เกิด Server Crash (HTTP 500) และไม่ส่งค่าผิดพลาดไปรันใน `ngspice` | **PASS** |
+
+---
+
+## 2. แหล่งอ้างอิง ความคลาดเคลื่อน และข้อจำกัด (References, Discrepancies & Limitations)
+
+1. **แหล่งอ้างอิง (References)**:
+   - **Analytical Model (`bjt.py`)**: คำนวณด้วยแบบจำลองอุดมคติค่าคงที่ ($\beta = 100$, $V_{BE} = 0.70\text{ V}$ คงที่, ไม่คิด Early Effect)
+   - **SPICE Model (`spice_engine.py`)**: ใช้สมการ Gummel-Poon ของทรานซิสเตอร์จริง `Q2N2222` (`IS=14.34f`, `BF=255.9`, `VAF=74.03`) รันบน `ngspice-47`
+2. **ความคลาดเคลื่อนระหว่าง Analytical กับ SPICE (Discrepancies)**:
+   - ค่าจุดทำงาน DC แตกต่างกันเล็กน้อย (เช่น $V_B = 1.94\text{ V}$ vs $2.016\text{ V}$ และ $V_{CE} = 8.05\text{ V}$ vs $7.653\text{ V}$) เนื่องจากโมเดล `Q2N2222` มีอัตราขยายกระแสจริง ($\beta \approx 200\text{–}255$) สูงกว่าค่าสมมติ $\beta = 100$ ทำให้กระแสเบส $I_B$ น้อยลง ลดผลกระทบการโหลดตัวแบ่งแรงดัน ($R_1 \parallel R_2$) และแรงดันตกคร่อม $V_{BE}$ จริงแปรผันตามสมการไดโอด ($I_C = I_S e^{V_{BE}/V_T}$)
+3. **ข้อจำกัดของระบบ (Limitations)**:
+   - การจำลอง AC และ Transient ของ `ngspice` ในเวอร์ชันนี้รองรับเฉพาะโครงสร้าง **Voltage Divider Common-Emitter (CE Reference)** เท่านั้น (โหมด Fixed Bias และ Emitter Bias รองรับเฉพาะการวิเคราะห์ DC Bias)
+   - กราฟ `.ac` ใช้แบบจำลองเชิงเส้นสัญญาณเล็ก (Small-Signal) จึงไม่แสดงอาการขลิบสัญญาณ (Clipping) เมื่อป้อนอินพุตขนาดใหญ่ (ต้องตรวจสอบอาการ Clipping ในโหมด `.tran`)
+
+---
+
+## 3. บันทึกการใช้ AI และการตรวจสอบด้วยตนเอง (AI Usage & Self-Verification Log)
+
+- **ส่วนที่ AI ช่วยสร้าง/แก้ไข**: AI ช่วยออกแบบโครงสร้างโมดูล `spice_engine.py` สำหรับสร้าง Netlist และเรียกใช้งาน `ngspice_con.exe` แบบ Batch Mode รวมถึงปรับปรุงหน้า UI ใน `templates/index.html` และ `static/style.css` เพื่อเพิ่มแท็บวิเคราะห์ `.op` / `.ac` / `.tran`, วาดกราฟ Canvas Bode/Waveform และซ่อนช่อง input ที่ไม่ใช้ในแต่ละโหมด
+- **ส่วนที่นักศึกษาตรวจสอบและแก้ไขด้วยตนเอง**: นักศึกษาได้ทดสอบรันเซิร์ฟเวอร์ Flask บนเครื่องจริง (`http://127.0.0.1:5000`), ตรวจสอบความถูกต้องของวงจร SVG และหน่วยทางไฟฟ้า, รันชุดทดสอบ `pytest` จนผ่านครบทั้งหมด 43 ข้อ (`43 passed`) รวมถึงเปิดตรวจสอบ Generated Netlist และ Log ของ `ngspice` เทียบกับผลคำนวณทางทฤษฎีด้วยตนเอง

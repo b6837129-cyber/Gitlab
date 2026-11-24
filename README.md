@@ -1,40 +1,33 @@
-# Lab 04: BJT Amplifier Simulator v1 (Common-Emitter DC Bias & SPICE Analysis)
+# Lab 04: BJT Amplifier Simulator v1 (ENG29 2121)
 
-## Overview
+เว็บแอปพลิเคชันจำลองวงจรทรานซิสเตอร์ BJT (Common-Emitter Amplifier และ DC Bias 3 รูปแบบ) พัฒนาด้วย Python (Flask) ร่วมกับโปรแกรมจำลองวงจรจริง **ngspice** สำหรับรายวิชา **ENG29 2121 Computer Programming for Electrical Engineers**
 
-A Flask web app for the **ENG29 2121 (Computer Programming for Electrical Engineers)** lab that computes both the analytical DC operating point and real **ngspice** circuit simulations (`.op`, `.ac`, and `.tran`) of a BJT amplifier.
+## คุณสมบัติหลัก (Features)
+- **DC Bias Analytical Solver (`bjt.py` & `verification.py`)**: คำนวณจุดทำงาน DC Operating Point สำหรับวงจร 3 รูปแบบ ได้แก่ **Voltage Divider Bias**, **Fixed Bias**, และ **Emitter Bias** พร้อมระบบตรวจสอบอิสระ (Independent Nodal Verification) และแจ้งเตือนสถานะ Active / Cutoff / Saturation
+- **Real SPICE Simulation (`spice_engine.py` + `ngspice`)**:
+  - **DC Operating Point (`.op`)**: จำลองแรงดันและกระแส DC จริงด้วยโมเดลทรานซิสเตอร์ `Q2N2222`
+  - **AC Small-Signal Analysis (`.ac`)**: วิเคราะห์การตอบสนองความถี่ หาอัตราขยาย Midband Gain (V/V, dB), ความถี่ตัดต่ำ/สูง ($f_L, f_H$) และแสดงกราฟ **Bode Magnitude & Phase**
+  - **Transient Analysis (`.tran`)**: จำลองรูปคลื่นสัญญาณอินพุต $V_{in}(t)$ และเอาต์พุต $V_{out}(t)$ ในโดเมนเวลา พร้อมแสดงการกลับเฟส $180^\circ$
+- **Provenance & Netlist Inspector**: แยกป้ายกำกับชัดเจนระหว่างค่าคำนวณทางทฤษฎี (`Analytical`) และค่าจากโปรแกรมจำลองจริง (`Engine: ngspice`) พร้อมขอดู Netlist (`.cir`) และ Log การรันจริงได้
 
-- **Analytical DC Bias Solver (`bjt.py` & `verification.py`)**: Supports three bias configurations (**Voltage Divider Bias**, **Fixed Bias**, and **Emitter Bias**), validates inputs with unit conversion, reports the operating region (active, cutoff, or saturation), and cross-checks voltage-divider results against an independent nodal analysis.
-- **Real ngspice Simulation Engine (`spice_engine.py`)**: Executes batch simulations via `ngspice_con.exe` / `ngspice` using a `Q2N2222` BJT model for the Common-Emitter amplifier, providing real DC operating points (`.op`), small-signal Bode magnitude/phase plots (`.ac`), and time-domain input/output waveforms (`.tran`), alongside a netlist and solver log inspector.
+---
 
-The page is an English three-column dashboard: an input panel with unit dropdowns and SPICE mode tabs, a dynamic inline SVG circuit diagram that updates with your component values and bias mode, and a results panel that separates **Analytical** values from **Engine: ngspice** results.
+## การติดตั้ง (Installation)
 
-## Features
-
-- **Three Bias Modes**: Voltage Divider Bias, Fixed Bias, and Emitter Bias (Single Supply), dynamically hiding unused component fields.
-- **Three Real SPICE Analysis Modes (CE Reference)**:
-  - `DC (.op)`: Real SPICE node voltages ($V_B, V_E, V_C, V_{CE}$) and branch currents ($I_B, I_C$).
-  - `AC (.ac)`: Frequency sweep (`10 Hz` to `10 MHz`) with midband gain (V/V and dB), $-3\text{ dB}$ cutoff frequencies ($f_L, f_H$), and an interactive Bode magnitude & phase plot.
-  - `Transient (.tran)`: Time-domain sine-wave simulation showing peak $V_{in}$, peak $V_{out}$, voltage gain, $180^\circ$ phase inversion, and dual-axis waveform plots.
-- **Functional Unit Dropdowns**: `V`/`mV` for voltages, `Ω`/`kΩ`/`MΩ` for resistances, `nF`/`µF`/`mF` for coupling capacitors, `Hz`/`kHz`/`MHz` for frequency, and `—` for $\beta$.
-- **Provenance & Netlist Inspector**: Clearly distinguishes analytical results (`dc_bias.py`) from `ngspice` solver outputs, with an expandable panel to inspect the generated `.cir` netlist and raw `ngspice` log.
-- **Input Validation & Regression Tests**: English validation messages for invalid/non-finite inputs and 43 automated unit and Flask route tests.
-
-## Install
-
-### 1. Install `ngspice` (Required for SPICE Simulation)
-
+### 1. ติดตั้ง ngspice (จำเป็นสำหรับการจำลอง SPICE)
 - **Windows**:
-  1. Download the 64-bit Windows `ngspice` archive (e.g., `ngspice-47_64.zip`) from SourceForge.
-  2. Extract it so `ngspice_con.exe` is located at `C:\Spice64\bin\ngspice_con.exe` and add `C:\Spice64\bin` to your System `PATH`.
-  3. Verify in PowerShell: `ngspice_con -v`
-- **macOS**: `brew install ngspice`
+  1. ดาวน์โหลด `ngspice` สำหรับ Windows (เช่น `ngspice-47_64.zip`) จาก [SourceForge ngspice](https://sourceforge.net/projects/ngspice/files/)
+  2. แตกไฟล์ไว้ที่ `C:\Spice64` (ให้มีไฟล์ `C:\Spice64\bin\ngspice_con.exe`) และเพิ่ม `C:\Spice64\bin` ลงใน System `PATH`
+  3. ทดสอบใน Terminal: `ngspice_con -v`
+- **macOS (Homebrew)**: `brew install ngspice`
 - **Ubuntu / Debian**: `sudo apt-get update && sudo apt-get install -y ngspice`
 
-### 2. Install Python Dependencies
-
-Python 3.12 or newer is required.
-
-```powershell
+### 2. ติดตั้ง Python Dependencies
+```bash
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+# Windows (PowerShell):
+.venv\Scripts\Activate.ps1
+# macOS / Linux:
+# source .venv/bin/activate
+
+pip install -r requirements.txt
